@@ -1,0 +1,26 @@
+{
+  "name": "ck-weboldal",
+  "version": "1.0.0",
+  "description": "## Projekt Áttekintés A Cantusok Köre weboldal célja, hogy bemutassa a közösséget és lehetőséget biztosítson a kapcsolatfelvételre. A weboldal tartalmaz egy főoldalt, amely információkat nyújt a közösségről és elérhetőségeket.",
+  "main": "ck_fooldal.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nagymark67/ck-weboldal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Nagymark67/ck-weboldal/issues"
+  },
+  "homepage": "https://github.com/Nagymark67/ck-weboldal#readme",
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1"
+  }
+}
