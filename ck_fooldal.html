@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cantusok Köre</title>
+    <link rel="stylesheet" href="ck_fooldal.css">
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="ck_cimer_szines.png" alt="Cantusok Köre Logó" class="logo">
+        </div> 
+    </header>
+
+    <main>
+    <nav class="toc">
+        <h2>Tartalomjegyzék</h2>
+        <ul>
+            <li><a href="#rolunk">Rólunk</a></li>
+            <li><a href="#kapcsolat">Kapcsolat</a></li>
+            <li><a href="#member-list">Tagok</a></li>
+        </ul>
+    </nav>
+    <div class="content-container">
+        <div class="main-sections center-sections">
+            <section id="rolunk">
+                <h2>Rólunk</h2>
+                <p>placeholder</p>
+            </section>
+            <section id="kapcsolat">
+                <h2>Kapcsolat</h2>
+                <p>Amennyiben kérdéseid vannak, elérhetsz minket a <a href="https://www.facebook.com/CantusokKore/?locale=hu_HU" target="_blank">Facebook</a> oldalunkon keresztül, illetve a vezetőséget is nyugodtan keresheted.</p>        
+            </section>
+        </div>
+    </div>
+    <form id="loginForm">
+        <input type="text" id="username" placeholder="Felhasználónév" required>
+        <button type="submit">Bejelentkezés</button>
+    </form>
+    <aside id="member-list">
+        <h2>Online tagok</h2>
+        <ul id="online-users"></ul>
+    </aside>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</main>
+
+    <footer>
+        <p>&copy; 2025 Cantusok Köre. Minden jog fenntartva.</p>
+    </footer>
+</body>
+</html>

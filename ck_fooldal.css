@@ -1,0 +1,133 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    background-color: #8B0000;
+    color: white;
+    padding: 10px 20px;
+    text-align: left;
+}
+
+.logo-container {
+    display: inline-block;
+}
+
+.logo {
+    max-width: 250px;
+}
+
+.content-container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 32px;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+section {
+    margin-right: 0;
+}
+
+.center-sections {    
+    display: flex;
+    flex-direction: column;
+}
+.center-sections section {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto 24px auto;
+}
+
+footer {
+    background-color: #333;
+    color: white;
+    text-align: center;
+    padding: 10px 0;
+    position: relative;
+    bottom: 0;
+    width: 100%;
+}
+
+.content-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 40px;
+    gap: 0;
+}
+
+.main-sections {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+#member-list {
+    flex-shrink: 0;
+    background: #faf6f6;
+    border-radius: 8px;
+    padding: 20px;
+    min-width: 180px;
+    max-width: 250px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.06);
+    margin-left: 40px;
+    position: fixed;
+    top: 400px; /* adjust as needed to clear the header */
+    right: 40px; /* distance from the right edge */
+    height: fit-content;
+    z-index: 100;
+}
+
+@media (max-width: 900px) {
+    .content-container {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 10px;
+    }
+    #member-list {
+        position: static;
+        margin: 20px auto 0 auto;
+        max-width: 100%;
+    }
+}
+
+.toc {
+    background: #f9f9f9;
+    border-radius: 8px;
+    padding: 16px 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 0 6px rgba(0,0,0,0.04);
+    max-width: 400px;
+}
+
+.toc ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    gap: 24px;
+}
+
+.toc li {
+    display: inline;
+}
+
+.toc a {
+    color: #8B0000;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.toc a:hover {
+    text-decoration: underline;
+}
