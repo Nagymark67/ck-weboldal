@@ -7,40 +7,7 @@
     <link rel="stylesheet" href="ck_fooldal.css">
 </head>
 
-<script>
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const username = document.getElementById('username').value;
-    const res = await fetch('http://localhost:3000/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
-    });
-    if (res.ok) {
-        loadOnlineUsers();
-    } else {
-        alert('Sikertelen bejelentkezés!');
-    }
-});
 
-async function loadOnlineUsers() {
-    const res = await fetch('http://localhost:3000/online-users', {
-        credentials: 'include'
-    });
-    const data = await res.json();
-    const ul = document.getElementById('online-users');
-    ul.innerHTML = '';
-    data.users.forEach(user => {
-        const li = document.createElement('li');
-        li.textContent = user;
-        ul.appendChild(li);
-    });
-}
-
-// Optionally, refresh online users every 10 seconds
-setInterval(loadOnlineUsers, 10000);
-</script>
 
 <body>
     <header>
@@ -72,8 +39,10 @@ setInterval(loadOnlineUsers, 10000);
     </div>
     <form id="loginForm">
         <input type="text" id="username" placeholder="Felhasználónév" required>
+        <input type="password" id="password" placeholder="Jelszó" required>
         <button type="submit">Bejelentkezés</button>
     </form>
+    <button id="logoutBtn" style="display:none;">Kijelentkezés</button>
     <aside id="member-list">
         <h2>Online felhasználók</h2>
         <ul id="online-users"></ul>
@@ -83,5 +52,71 @@ setInterval(loadOnlineUsers, 10000);
     <footer>
         <p>&copy; 2025 Cantusok Köre. Minden jog fenntartva.</p>
     </footer>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const res = await fetch('http://localhost:3000/login', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username , password })
+    });
+    if (res.ok) {
+        loadOnlineUsers();
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('logoutBtn').style.display = 'block';
+        loadOnlineUsers();
+    } else {
+        alert('Sikertelen bejelentkezés!');
+    }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async function() {
+    const res = await fetch('http://localhost:3000/logout', {
+        method: 'POST',
+        credentials: 'include'
+    });
+    if (res.ok) {
+        document.getElementById('loginForm').style.display = 'block';
+        document.getElementById('logoutBtn').style.display = 'none';
+        loadOnlineUsers();
+    }
+});
+
+async function loadOnlineUsers() {
+    const res = await fetch('http://localhost:3000/online-users', {
+        credentials: 'include'
+    });
+    const ul = document.getElementById('online-users');
+    ul.innerHTML = '';
+    if (res.ok) {
+        const data = await res.json();
+        data.users.forEach(user => {
+            const li = document.createElement('li');
+            li.textContent = user;
+            ul.appendChild(li);
+        });
+        // If the user is in the list, show logout, else show login
+        const username = document.getElementById('username').value;
+        if (data.users.length > 0 && data.users.includes(username)) {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('logoutBtn').style.display = 'block';
+        } else {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('logoutBtn').style.display = 'none';
+        }
+    } else {
+        document.getElementById('loginForm').style.display = 'block';
+        document.getElementById('logoutBtn').style.display = 'none';
+    }
+}
+
+// Optionally, refresh online users every 10 seconds
+setInterval(loadOnlineUsers, 10000);
+
+loadOnlineUsers();
+</script>
 </body>
 </html>
