@@ -9,14 +9,35 @@ header {
     color: white;
     padding: 10px 20px;
     text-align: left;
+    position: relative;    
 }
 
 .logo-container {
     display: inline-block;
+        flex: 0 0 auto;
+        margin-left: 50px;
 }
 
 .logo {
     max-width: 250px;
+}
+
+.header-flex {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 90px;
+    position: relative;
+}
+
+.banner-img {
+    flex: 1 1 auto;
+    display: block;
+    margin: 0 auto;
+    max-height: 250px;
+    max-width: 600px;
+    object-fit: contain;
 }
 
 .content-container {
@@ -27,6 +48,24 @@ header {
     max-width: 1000px;
     margin: 0 auto;
     padding: 20px 0;
+}
+
+.corner-login {
+    position: absolute;
+    right: 40px;
+    top: 10px;
+    left: auto;
+    bottom: auto;
+    min-width: 220px;
+    background: #fff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 100;
+    display: block;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
 }
 
 section {
@@ -131,3 +170,4 @@ footer {
 .toc a:hover {
     text-decoration: underline;
 }
+
