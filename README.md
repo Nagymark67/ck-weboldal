@@ -1,17 +1,23 @@
 # Cantusok Köre Weboldal
 
-## Projekt Áttekintés
-A Cantusok Köre weboldal célja, hogy bemutassa a közösséget és lehetőséget biztosítson a kapcsolatfelvételre. A weboldal tartalmaz egy főoldalt, amely információkat nyújt a közösségről és elérhetőségeket.
+## Funkciók
 
-## Fájlok
-- **ck_fooldal.html**: A weboldal fő struktúráját tartalmazza, beleértve a fejlécet, a fő tartalmi szakaszokat és a láblécet. Jelenleg két szekcióval rendelkezik: "Rólunk" és "Kapcsolat".
-  
-- **ck_fooldal.css**: A HTML fájl stíluslapja, amely a weboldal elemeinek formázására szolgál, beleértve a layout-ot, színeket, betűtípusokat és pozicionálást.
+### Backend (server.js)
+- **Bejelentkezés**: Felhasználónév és jelszó alapján történő hitelesítés, session kezelés és online felhasználók nyilvántartása.
+- **Online felhasználók lekérdezése**: Jelenleg bejelentkezett felhasználók listájának lekérése.
+- **Kijelentkezés**: Felhasználó kijelentkeztetése, session törlése.
 
-## Használati Útmutató
-1. **Weboldal megnyitása**: A `ck_fooldal.html` fájl megnyitásával a böngészőben megtekintheti a weboldalt.
-2. **Stílus testreszabása**: A `ck_fooldal.css` fájl módosításával testreszabhatja a weboldal megjelenését.
-3. **Kapcsolatfelvétel**: A "Kapcsolat" szekcióban található linkeken keresztül léphet kapcsolatba a közösséggel.
+### Frontend (index.html)
+- **Bejelentkezési űrlap**: Egyszerű felhasználói belépés.
+- **Navigáció és tartalom**: Rólunk, Tagok listája, Kapcsolat szekciók.
+- **Tagok listája**: Alapító és rendes tagok felsorolása.
+
+### Stílusok (ck_fooldal.css)
+- Modern, letisztult és reszponzív webes megjelenés.
+
+---
+
+További részletekért és a teljes funkciólistáért tekintsd meg a [forráskódot a GitHubon](https://github.com/Nagymark67/ck-weboldal/search?q=function).
 
 ## Licenc
 A projekt 2025-ig védett. Minden jog fenntartva.
