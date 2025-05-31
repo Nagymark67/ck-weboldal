@@ -140,6 +140,18 @@ footer {
     }
 }
 
+.content-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 32px;
+    margin: 0 auto;
+    padding: 20px 0;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 40px;
+}
+
 .toc {
     position: sticky;
     top: 20px; /* distance from the top of the viewport */
@@ -151,17 +163,6 @@ footer {
     box-shadow: 0 0 6px rgba(0,0,0,0.04);
     max-width: 300px;
     z-index: 10;
-}
-.content-container {
-    display: flex;
-    align-items: flex-start;
-    gap: 32px;
-    margin: 0 auto;
-    padding: 20px 0;
-    justify-content: space-between;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px 40px;
 }
 
 .toc ul {
@@ -184,5 +185,28 @@ footer {
 
 .toc a:hover {
     text-decoration: underline;
+}
+
+#all-members ul li {
+    list-style: none;
+    padding-top: 8px;
+    padding-bottom: 5px;
+    position: relative;
+    padding-left: 32px; /* space for the image */
+}
+
+#all-members ul li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 5px;
+    width: 20px;
+    height: 20px;
+    padding: 1px;
+    /*background-image: url('CK címer fekete-fehér.png');*/
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    display: inline-block;
 }
 

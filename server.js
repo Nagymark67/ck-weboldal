@@ -16,7 +16,7 @@ const users = [
 let onlineUsers = [];
 
 app.use(cors({
-  origin: ['http://localhost', 'http://localhost:3000', 'http://localhost:5500', 'http://127.0.0.1'],
+  origin: ['http://localhost', 'http://localhost:3000', 'http://localhost:5500'],
   credentials: true
 }));
 app.use(bodyParser.json());
