@@ -53,9 +53,9 @@ header {
 .corner-login {
     position: absolute;
     right: 40px;
-    top: 10px;
+    top: auto;
     left: auto;
-    bottom: auto;
+    bottom: 10px;
     min-width: 220px;
     background: #fff;
     padding: 10px 15px;
@@ -120,7 +120,7 @@ footer {
     max-width: 250px;
     box-shadow: 0 0 8px rgba(0,0,0,0.06);
     margin-left: 40px;
-    position: fixed;
+    position: absolute;
     top: 400px; /* adjust as needed to clear the header */
     right: 40px; /* distance from the right edge */
     height: fit-content;
@@ -141,12 +141,27 @@ footer {
 }
 
 .toc {
+    position: sticky;
+    top: 20px; /* distance from the top of the viewport */
+    align-self: flex-start;
     background: #f9f9f9;
     border-radius: 8px;
     padding: 16px 24px;
     margin-bottom: 24px;
     box-shadow: 0 0 6px rgba(0,0,0,0.04);
-    max-width: 400px;
+    max-width: 300px;
+    z-index: 10;
+}
+.content-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 32px;
+    margin: 0 auto;
+    padding: 20px 0;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 40px;
 }
 
 .toc ul {
