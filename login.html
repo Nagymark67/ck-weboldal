@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bejelentkezés – Cantusok Köre</title>
+    <link rel="stylesheet" href="ck_fooldal.css">
+</head>
+<body>
+    <header>
+        <div class="header-flex">
+            <div class="logo-container">
+                <a href="index.html"><img src="ck_cimer_szines.png" alt="Cantusok Köre Logó" class="logo"></a>
+            </div>
+            <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
+        </div>
+    </header>
+    <main>
+        <div class="form-card">
+            <h2>Bejelentkezés</h2>
+            <form id="loginForm">
+                <input type="text" id="username" placeholder="Felhasználónév" required>
+                <input type="password" id="password" placeholder="Jelszó" required>
+                <button type="submit">Bejelentkezés</button>
+            </form>
+            <p>Még nincs fiókod? <a href="register.html">Regisztráció</a></p>
+        </div>
+    </main>
+    <footer>
+        © 2025 Cantusok Köre. Minden jog fenntartva.
+    </footer>
+    <script>
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const res = await fetch('http://localhost:3000/login', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        if (res.ok) {
+            window.location.href = "index.html";
+        } else {
+            const err = await res.json();
+            alert('Sikertelen bejelentkezés! ' + (err.message || ''));
+        }
+    });
+    </script>
+</body>
+</html>

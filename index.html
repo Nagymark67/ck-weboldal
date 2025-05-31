@@ -16,27 +16,37 @@
       <img src="ck_cimer_szines.png" alt="Cantusok Köre Logó" class="logo">
     </div>
     <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
-  </div>
-    <form id="loginForm" class="corner-login" style="display:none;">
-        <input type="text" id="username" placeholder="Felhasználónév" required>
-        <input type="password" id="password" placeholder="Jelszó" required>
-        <button type="submit">Bejelentkezés</button>
-    </form>
+  </div>    
 </header>
 
     <div id="loginLinkContainer" style="text-align:right; margin: 10px 40px 0 0;">
-        <a href="#" id="showLoginLink" style="color:#8B0000; font-weight:bold;">Bejelentkezés</a>
-        <a href="#" id="logoutLink" style="color:#8B0000; font-weight:bold; display:none;">Kijelentkezés</a>
+        <div id="loginLinksRow">
+        <a href="login.html" id="showLoginLink">Bejelentkezés</a>
+        <a href="#" id="logoutLink" style="display:none;">Kijelentkezés</a>
+        <a href="register.html" id="registerLink">Regisztráció</a>
+        </div>
+        <aside id="member-list">
+        <h2>Online felhasználók</h2>
+        <ul id="online-users"></ul>
     </div>
 
     <main>
     <nav class="toc">
         <h2>Az Oldal Tartalma</h2>
-        <ul>            
-            <li><a href="#rolunk">Rólunk</a></li>
-            <li><a href="#all-members">Tagok listája</a></li>
-            <li><a href="#kapcsolat">Kapcsolat</a></li>            
-        </ul>
+        <ul>
+        <li><a href="#rolunk">Rólunk</a></li>
+        <li>
+            <a href="#all-members">Tagok listája</a>
+            <ul>
+                <li><a href="#alapito-tagok">Alapító tagok</a></li>
+                <li><a href="#rendes-tagok">Rendes tagok</a></li>
+                <li><a href="#soproni-tagok">Soproni tagok</a></li>
+                <li><a href="#szekesfehervari-tag">Székesfehérvári tag</a></li>
+                <li><a href="#tiszteletbeli-tagok">Tiszteletbeli tagok</a></li>
+            </ul>
+        </li>
+        <li><a href="#kapcsolat">Kapcsolat</a></li>
+    </ul>
     </nav>
     <div class="content-container">
         <div class="main-sections center-sections">
@@ -47,7 +57,7 @@
             <section id="all-members">
     <h2>Tagok listája</h2>
 
-    <h3>Alapító tagok</h3>
+<h3 id="alapito-tagok">Alapító tagok</h3>
     <ul>
         <li>Bodnár Róbert a. Róbert Gida, aki úgy néz ki mint Micimackó</li>
         <li>Fodor Ferenc a. Nyomaseck Bobó avagy a Hallgatag Dalnok</li>
@@ -56,7 +66,7 @@
         <li>Barak Antal a. Atomanti</li>        
     </ul>
 
-    <h3>Rendes tagok</h3>
+<h3 id="rendes-tagok">Rendes tagok</h3>
     <ul>
         <li>Cseke Ádám a. Agyragyúrok</li>
         <li>Martis Zsombor a. Harcművész</li>
@@ -124,7 +134,7 @@
         <li>Béres Máté v. Két gyíkot látok</li>
     </ul>
 
-    <h3>Soproni tagok</h3>
+<h3 id="soproni-tagok">Soproni tagok</h3>
     <ul>
         <li>Sajnovits Bálint a. Wiking a II.</li>
         <li>Békési Péter a. Jumurdzsák</li>
@@ -150,12 +160,12 @@
         <li>Hanzséros Olivér a. EKScel a. TúlGONDol</li>
     </ul>
 
-    <h3>Székesfehérvári tag</h3>
+<h3 id="szekesfehervari-tag">Székesfehérvári tag</h3>
     <ul>
         <li>Szalai Gergely a. Bikerman</li>
     </ul>
 
-    <h3>Tiszteletbeli tagok</h3>
+<h3 id="tiszteletbeli-tagok">Tiszteletbeli tagok</h3>    
     <ul>
         <li>Tóth Imre Barnabás a. Cicapecér avagy Macskavadász</li>
         <li>Rimaszéki Gergő a. Buli Boy</li>
@@ -178,11 +188,8 @@
                 <p>Amennyiben kérdéseid vannak, elérhetsz minket a <a href="https://www.facebook.com/CantusokKore/?locale=hu_HU" target="_blank">Facebook</a> oldalunkon keresztül, illetve a vezetőséget is nyugodtan keresheted.</p>        
             </section>
         </div>
-    </div>
-    <aside id="member-list">
-        <h2>Online felhasználók</h2>
-        <ul id="online-users"></ul>
     </aside>
+    </div>
 </main>
 
     <footer>
@@ -190,35 +197,6 @@
     </footer>
 <script>
 let loggedInUser = null;
-
-document.getElementById('showLoginLink').addEventListener('click', function(e) {
-    e.preventDefault();
-    document.getElementById('loginForm').style.display = 'flex';
-    document.getElementById('showLoginLink').style.display = 'none';
-    document.getElementById('logoutLink').style.display = 'none';
-});
-
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-    const res = await fetch('http://localhost:3000/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username , password })
-    });
-    if (res.ok) {
-        loggedInUser = username;
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('logoutLink').style.display = 'inline';
-        document.getElementById('showLoginLink').style.display = 'none';
-        loadOnlineUsers();
-    } else {
-        const err = await res.json();
-        alert('Sikertelen bejelentkezés! ' + (err.message || ''));
-    }
-});
 
 document.getElementById('logoutLink').addEventListener('click', async function(e) {
     e.preventDefault();
@@ -228,12 +206,25 @@ document.getElementById('logoutLink').addEventListener('click', async function(e
     });
     if (res.ok) {
         loggedInUser = null;
-        document.getElementById('loginForm').style.display = 'none';
         document.getElementById('logoutLink').style.display = 'none';
         document.getElementById('showLoginLink').style.display = 'inline';
         loadOnlineUsers();
     }
 });
+
+async function checkLoginStatus() {
+    const res = await fetch('http://localhost:3000/me', { credentials: 'include' });
+    if (res.ok) {
+        const data = await res.json();
+        loggedInUser = data.username;
+        document.getElementById('logoutLink').style.display = 'inline';
+        document.getElementById('showLoginLink').style.display = 'none';
+    } else {
+        loggedInUser = null;
+        document.getElementById('logoutLink').style.display = 'none';
+        document.getElementById('showLoginLink').style.display = 'inline';
+    }
+}
 
 async function loadOnlineUsers() {
     const res = await fetch('http://localhost:3000/online-users', {
@@ -245,10 +236,10 @@ async function loadOnlineUsers() {
         const data = await res.json();
         data.users.forEach(user => {
             const li = document.createElement('li');
-            li.textContent = user;
+            li.textContent = user.username + (user.status ? ` (${user.status})` : '');
             ul.appendChild(li);
         });
-        if (loggedInUser && data.users.includes(loggedInUser)) {
+        if (loggedInUser && data.users.some(u => u.username === loggedInUser)) {
             document.getElementById('logoutLink').style.display = 'inline';
             document.getElementById('showLoginLink').style.display = 'none';
         } else {
@@ -260,9 +251,9 @@ async function loadOnlineUsers() {
         document.getElementById('showLoginLink').style.display = 'inline';
     }
 }
-
 setInterval(loadOnlineUsers, 10000);
 loadOnlineUsers();
+checkLoginStatus();
 </script>
 </body>
 </html>

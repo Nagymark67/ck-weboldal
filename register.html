@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Regisztráció</title>
+    <link rel="stylesheet" href="ck_fooldal.css">
+</head>
+<body>
+    <header>
+        <div class="header-flex">
+            <div class="logo-container">
+                <img src="ck_cimer_szines.png" alt="Cantusok Köre Logó" class="logo">
+            </div>
+            <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
+        </div>
+    </header>
+    <h2>Regisztráció</h2>
+    <form id="registerForm">
+        <input type="text" id="regUsername" placeholder="Felhasználónév" required>
+        <input type="password" id="regPassword" placeholder="Jelszó" required>
+        <select id="regStatus" required>
+            <option value="" disabled selected>Ki vagy?</option>
+            <option value="Szimpatizáns">Szimpatizáns</option>
+            <option value="Tanítvány">Tanítvány</option>
+            <option value="Tag">Tag</option>
+            <option value="Jegyző">Jegyző</option>
+            <option value="Alapító">Alapító</option>
+            <option value="Cantus Praeses">Cantus Praeses</option>
+        </select>
+        <button type="submit">Regisztráció</button>
+    </form>
+    <p><a href="index.html">Vissza a főoldalra</a></p>
+    <script>
+    document.getElementById('registerForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const username = document.getElementById('regUsername').value;
+    const password = document.getElementById('regPassword').value;
+    const status = document.getElementById('regStatus').value;
+    const res = await fetch('http://localhost:3000/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, status })
+    });
+    const data = await res.json();
+    if (res.ok) {
+        alert('Sikeres regisztráció! Most már bejelentkezhetsz.');
+        window.location.href = 'index.html';
+    } else {
+        alert('Hiba: ' + (data.message || 'Ismeretlen hiba'));
+    }
+});
+    </script>
+</body>
+</html>
