@@ -372,7 +372,32 @@ img {
     width: 100%;
     margin-bottom: 10px;
 }
-.form-card a {
+
+/* Make select look like the text inputs inside .form-card */
+.form-card select {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    height: 44px;
+    font-size: 1rem;
+    border-radius: 10px;
+    border: 1px solid #e6e6e6;
+    background: #fff;
+    margin-bottom: 12px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+.form-card input, .form-card select {
+    transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.form-card input:focus, .form-card select:focus {
+    outline: none;
+    box-shadow: 0 4px 12px rgba(139,0,0,0.08);
+    border-color: #a83232;
     color: #8B0000;
     text-decoration: underline;
 }

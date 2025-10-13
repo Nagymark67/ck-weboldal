@@ -14,29 +14,33 @@
             <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
         </div>
     </header>
-    <h2>Regisztráció</h2>
-    <form id="registerForm">
-        <input type="text" id="regUsername" placeholder="Felhasználónév" required>
-        <input type="password" id="regPassword" placeholder="Jelszó" required>
-        <select id="regStatus" required>
-            <option value="" disabled selected>Ki vagy?</option>
-            <option value="Szimpatizáns">Szimpatizáns</option>
-            <option value="Tanítvány">Tanítvány</option>
-            <option value="Tag">Tag</option>
-            <option value="Jegyző">Jegyző</option>
-            <option value="Alapító">Alapító</option>
-            <option value="Cantus Praeses">Cantus Praeses</option>
-        </select>
-        <button type="submit">Regisztráció</button>
-    </form>
-    <p><a href="index.html">Vissza a főoldalra</a></p>
+    <main>
+        <div class="form-card">
+            <h2>Regisztráció</h2>
+            <form id="registerForm">
+                <input type="text" id="regUsername" placeholder="Felhasználónév" required>
+                <input type="password" id="regPassword" placeholder="Jelszó" required>
+                <select id="regStatus" required>
+                    <option value="" disabled selected>Ki vagy?</option>
+                    <option value="Szimpatizáns">Szimpatizáns</option>
+                    <option value="Tanítvány">Tanítvány</option>
+                    <option value="Tag">Tag</option>
+                    <option value="Jegyző">Jegyző</option>
+                    <option value="Alapító">Alapító</option>
+                    <option value="Cantus Praeses">Cantus Praeses</option>
+                </select>
+                <button type="submit">Regisztráció</button>
+            </form>
+            <p><a href="index.html">Vissza a főoldalra</a></p>
+        </div>
+    </main>
     <script>
     document.getElementById('registerForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const username = document.getElementById('regUsername').value;
     const password = document.getElementById('regPassword').value;
     const status = document.getElementById('regStatus').value;
-    const res = await fetch('http://localhost:3000/register', {
+    const res = await fetch('/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, status })

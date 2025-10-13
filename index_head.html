@@ -1,0 +1,644 @@
+﻿<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cantusok Köre</title>
+    <link rel="stylesheet" href="ck_fooldal.css">
+        <style>
+        /* Simple modal styles for logout confirmation */
+        .ck-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            /* Raise modal above most page elements to avoid being covered */
+            z-index: 20000;
+        }
+        .ck-modal {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px 22px;
+            max-width: 520px;
+            width: calc(100% - 40px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+            color: #222;
+            font-family: inherit;
+        }
+        .ck-modal p { margin: 0 0 18px 0; line-height: 1.4; }
+        .ck-modal .ck-modal-actions { display:flex; gap:12px; justify-content:flex-end; }
+        .ck-btn { padding:8px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+    /* Ensure only the floating plus is visible as the create control */
+    button[title="Új poszt"]:not(#floatingCreate) { display: none !important; }
+        .ck-btn.affirm { background:#8B0000; color:#fff; border-color:#8B0000; }
+        .ck-btn.cancel { background:#fff; color:#8B0000; border-color:#8B0000; }
+        @media (max-width:480px) {
+            .ck-modal { padding:16px; }
+            .ck-modal .ck-modal-actions { flex-direction:column-reverse; }
+            .ck-btn { width:100%; }
+        }
+        </style>
+</head>
+
+
+
+<body>
+    <header>
+    <div class="header-flex">
+    <div class="logo-container">
+      <img src="ck_cimer_szines.png" alt="Cantusok Köre Logó" class="logo">
+    </div>
+    <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
+  </div>    
+</header>
+
+    <div id="loginLinkContainer" style="text-align:right; margin: 10px 40px 0 0;">
+    <div id="loginLinksRow">
+    <a href="login.html" id="showLoginLink">Bejelentkezés</a>
+    <a href="login.html" id="logoutLink" style="display:none;">Kijelentkezés</a>
+    <a href="register.html" id="registerLink">Regisztráció</a>
+    </div>
+        <div id="userStatus" style="text-align:right; margin-top:6px; font-weight:600; color:#8B0000"></div>
+        <aside id="member-list">
+        <h2>Online felhasználók</h2>
+        <ul id="online-users"></ul>
+    </div>
+
+        <!-- Logout confirmation modal -->
+        <div id="logoutModal" class="ck-modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+            <div class="ck-modal" role="document">
+                <p>Sajnáljuk, hogy kilépni vágyakozol. Biztos ki szeretnél lépni?</p>
+                <div class="ck-modal-actions">
+                    <button id="logoutCancel" class="ck-btn cancel">Nem</button>
+                    <button id="logoutConfirm" class="ck-btn affirm">Igen</button>
+                </div>
+            </div>
+        </div>
+
+    <main>
+    <nav class="toc">
+        <h2>Az Oldal Tartalma</h2>
+        <ul>
+        <li><a href="#rolunk">Rólunk</a></li>
+        <li>
+            <a href="#all-members">Tagok listája</a>
+            <ul>
+                <li><a href="#alapito-tagok">Alapító tagok</a></li>
+                <li><a href="#rendes-tagok">Rendes tagok</a></li>
+                <li><a href="#soproni-tagok">Soproni tagok</a></li>
+                <li><a href="#szekesfehervari-tag">Székesfehérvári tag</a></li>
+                <li><a href="#tiszteletbeli-tagok">Tiszteletbeli tagok</a></li>
+            </ul>
+        </li>
+        <li><a href="#kapcsolat">Kapcsolat</a></li>
+    </ul>
+    </nav>
+    <div class="content-container">
+        <div class="main-sections center-sections">
+                <!-- Post composer and feed -->
+                <section id="feed-section" style="margin-bottom:20px; position:relative;">
+                    <h2>Hírek és események</h2>
+                    <!-- Composer modal (hidden by default) - act like logout modal -->
+                    <div id="composerModal" class="ck-modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" style="display:none;">
+                        <div class="ck-modal" role="document" style="max-width:760px;">
+                            <h3>Új poszt</h3>
+                            <div id="composer-toolbar" style="display:flex; gap:8px; margin-bottom:8px;">
+                                <button type="button" data-cmd="bold">B</button>
+                                <button type="button" data-cmd="italic">I</button>
+                                <button type="button" data-cmd="link">Link</button>
+                                <button type="button" data-cmd="ul">Lista</button>
+                            </div>
+                            <div id="composer-editor" contenteditable="true" style="min-height:160px; border:1px solid #e6e6e6; padding:12px; border-radius:8px; background:#fff;"></div>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+                                <label style="display:flex; gap:8px; align-items:center;">Csatolmányok: <input id="composer-files" type="file" multiple accept="image/*,video/*,application/pdf"></label>
+                                <label>Láthatóság: <select id="composer-visibility"><option value="mindenki">Mindenki</option><option value="tagok_es_tanitvanyok">Tagok és tanítványok</option><option value="csak_tagok">Csak tagok</option></select></label>
+                            </div>
+                            <div class="ck-modal-actions" style="margin-top:12px;">
+                                <button id="composerCancel" class="ck-btn cancel">Mégse</button>
+                                <button id="composerSubmit" class="ck-btn affirm">Posztolás</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="feed" style="margin-top:18px;">
+                        <p id="feed-loading">Betöltés...</p>
+                        <div id="posts-list"></div>
+                    </div>
+                    <!-- Create post button placed inside the feed card on the right (visible to admins) -->
+                    <button id="floatingCreate" aria-label="Új poszt" title="Új poszt" tabindex="0" role="button" class="floating-create">+</button>
+                </section>
+            <section id="rolunk">
+                <h2>Rólunk</h2>
+                <p>placeholder</p>
+            </section>
+            
+            <section id="all-members">
+    <h2>Tagok listája</h2>
+
+<h3 id="alapito-tagok">Alapító tagok</h3>
+    <ul>
+        <li>Bodnár Róbert a. Róbert Gida, aki úgy néz ki mint Micimackó</li>
+        <li>Fodor Ferenc a. Nyomaseck Bobó avagy a Hallgatag Dalnok</li>
+        <li>Simon Gábor a. Hombre Grande</li>
+        <li>Czakó Gábor a. Fogyikirály avagy kefehajú, ingyom-bingyom, balekinatipró</li>
+        <li>Barak Antal a. Atomanti</li>        
+    </ul>
+
+<h3 id="rendes-tagok">Rendes tagok</h3>
+    <ul>
+        <li>Cseke Ádám a. Agyragyúrok</li>
+        <li>Martis Zsombor a. Harcművész</li>
+        <li>Heiner Ádám a. Csillés</li>
+        <li>Suha Norbert a. Dozer avagy a Skízmester Főszakács</li>
+        <li>Joó László a. Nótafa</li>
+        <li>Laskay Péter a. Domborgó</li>
+        <li>Nagy László a. Intonátor</li>
+        <li>Karacs Csaba a. NótaroCK</li>
+        <li>Makranczi Pál a. Flóris</li>
+        <li>Koczák Péter a. Képész</li>
+        <li>Kéki Dávid a. Hókuszpók</li>
+        <li>Szabó Tibor a. Kolompoló</li>
+        <li>Ginovszky Máté a. Az emlékek őre!</li>
+        <li>Fridrik Mihály a. Kócos</li>
+        <li>Orosz Viktória a. Dalangyal</li>
+        <li>Bajzát Imre a. Dongó</li>
+        <li>Iván Tamás a. Ob-Ivan</li>
+        <li>Gályász Dániel a. Galya avagy Mit nekem busz, mulatok amíg van bennem szusz</li>
+        <li>Konkoly Krisztián a. Bolondos Dallamok</li>
+        <li>Szabó Ákos Imre a. Houdini</li>
+        <li>Csicsek Ákos a. Culamy</li>
+        <li>Tubak Viktor a. Köbcös</li>
+        <li>Novák Ferenc a. Csendkirály</li>
+        <li>Remeczki Ferenc a. Lelkes</li>
+        <li>Farkas Máté a. Senki Alfonz</li>
+        <li>Szabó Gábor a. Hypo</li>
+        <li>Moravecz Ádám a. Schmollis</li>
+        <li>Korózs József a. Rozsda</li>
+        <li>Szőllősi Gergő a. Nomen est omen</li>
+        <li>Kun Dániel Péter a. Vodkapusztító, avagy az enyém rövid</li>
+        <li>Asztalos Ádám a. Sörpacsirta</li>
+        <li>Gaál Ádám a. Vecker</li>
+        <li>Romenda Roland Róbert a. Hosszúszemű Ember</li>
+        <li>Bihari István a. Picúr, avagy úgyis nagyobb vagyok nálad</li>
+        <li>Mészáros József Márk a. Béni</li>
+        <li>Biaczovszky Imre a. ÖnKéntEKS</li>
+        <li>Debity Péter a. TV Maci</li>
+        <li>Varga Zoltán a. Főnix</li>
+        <li>Kerekes Endre László a. A Bányabölcsész</li>
+        <li>Simon Tamás a. Cherokee</li>
+        <li>Tóth Tamás Bendegúz a. Pianino</li>
+        <li>Majoros Tamás a. Az égig érő legoember,avagy optimizmusból ötös</li>
+        <li>Czuczor Andor Vászoly a. Bicskás Betyár</li>
+        <li>Hegedüs Balázs a. Égiszeszelő</li>
+        <li>Kovács Soma a. Marathón avagy Anyámat tequilával csábítom</li>
+        <li>Jakkel Mihály Bertalan a. Ismétlés a tudás anyja!</li>
+        <li>Gajdán Dénes a. Professzor Úr</li>
+        <li>Makkai Dávid a. Vivát Bacchus</li>
+        <li>Siomos Angelos Sylvester a. Sasszem</li>
+        <li>Tóth Bertalan Bence a. Buddha</li>
+        <li>Varga Róbert a. N.N. pajtás</li>
+        <li>Kabai Bálint a. Nótabáró</li>
+        <li>Pistai Titusz a. Wikipédiusz</li>
+        <li>Szunyogh Örs Péter a. Aurea Mediocritas avagy aztán kijózanodtam</li>
+        <li>Bubonyi Tamás a. Elektróger</li>
+        <li>Gyenes Bálint Dániel a. JegesmaCKó</li>
+        <li>Csécsi Marcell a. Égenjáró</li>
+        <li>Pető Márk András a. Dalkövet</li>
+        <li>Váczi András Gergely a. ♩ Kannás ANDRÁS ♩</li>
+        <li>Gajdán Bence a. BeszólÉSZ</li>
+        <li>Kocsis Erik Donát a. Rumcájsz</li>
+        <li>Szilasi Alfréd a. A kígyók [Szünet] kígyóznak</li>
+        <li>Nagy Márk a. Burschazam</li>
+        <li>Béres Máté v. Két gyíkot látok</li>
+    </ul>
+
+<h3 id="soproni-tagok">Soproni tagok</h3>
+    <ul>
+        <li>Sajnovits Bálint a. Wiking a II.</li>
+        <li>Békési Péter a. Jumurdzsák</li>
+        <li>Demeter Márk a. KanSas</li>
+        <li>Fehér Gábor a. Joe</li>
+        <li>Domokos Gábor a. Naffejű</li>
+        <li>Magyar Koppány a. Magyarátor</li>
+        <li>Szőke Szilárd a. Infantilis kREDitvadász a. Az Úr árnyékában</li>
+        <li>Beniczki János a. Kántor</li>
+        <li>Gál Balázs a. Petrencésrúd</li>
+        <li>Szép Ádám a. Intéző</li>
+        <li>Soós Norbert a. Hordó</li>
+        <li>Aczkov Szlávko a. Zacsi</li>
+        <li>Hegede István a. Háromnegyed</li>
+        <li>Ekés Bálint a. Ekés a. Pajkos Koala a. Nekem sosem volt vulgóm, de érdekel milyen lehet</li>
+        <li>Vargovics Máté a. Zala</li>
+        <li>Gyovai Tamás a. Kaméleon</li>
+        <li>Gál Gergely a. Medve bácsi</li>
+        <li>Váradi Márton László a. Muslica</li>
+        <li>Ágoston Álmos Pál a. Blaublut</li>
+        <li>Kardos Zsolt a. AffEKStál a. Radix Maximus</li>
+        <li>Nagy Ábel a. Lüke a. dalolÁSZom</li>
+        <li>Hanzséros Olivér a. EKScel a. TúlGONDol</li>
+    </ul>
+
+<h3 id="szekesfehervari-tag">Székesfehérvári tag</h3>
+    <ul>
+        <li>Szalai Gergely a. Bikerman</li>
+    </ul>
+
+<h3 id="tiszteletbeli-tagok">Tiszteletbeli tagok</h3>    
+    <ul>
+        <li>Tóth Imre Barnabás a. Cicapecér avagy Macskavadász</li>
+        <li>Rimaszéki Gergő a. Buli Boy</li>
+        <li>Papp Tibor a. Ego<sup>n</sup> a kisfőnök</li>
+        <li>Lukács Tamás a. Cantusok Kaktusza</li>
+        <li>Molnár Csaba a. Colos</li>
+        <li>Cseke Bence a. Gigabursch</li>
+        <li>Molnár Zoltán a. Társművész</li>
+        <li>Pálinkás Robert Gusztáv a. Cefre (B.T.V.)</li>
+        <li>Morvai Tibor a. Csocsoszán</li>
+        <li>Krajczár Martin a. Szikra</li>
+        <li>Papp András a. Úristnnn!!! FEKA vagyok?!</li>
+        <li>Oláh Róbert a. Burzum BcRich és semmi más</li>
+        <li>Pataki Flóra a. π a szeleburdi szószátyár avagy a hangomnál csak a lelkesedésem nagyobb</li>
+        <li>Oros Anna Veronika a. BölcsészGépészBányászlány avagy erre is van egy nótám</li>
+    </ul>
+</section>
+            <section id="kapcsolat">
+                <h2>Kapcsolat</h2>
+                <p>Amennyiben kérdéseid vannak, elérhetsz minket a <a href="https://www.facebook.com/CantusokKore/?locale=hu_HU" target="_blank">Facebook</a> oldalunkon keresztül, illetve a vezetőséget is nyugodtan keresheted.</p>        
+            </section>
+        </div>
+    </aside>
+    </div>
+</main>
+
+    <footer>
+        <p>&copy; 2025 Cantusok Köre. Minden jog fenntartva.</p>
+    </footer>
+<script>
+// floating button styles injected via JS-safe class
+const styleEl = document.createElement('style');
+styleEl.textContent = `
+.floating-create {
+    /* Hidden by default; JS will show to authorized users */
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    width:56px; height:56px; border-radius:28px; background:#8B0000; color:#fff; border:none;
+    box-shadow:0 8px 24px rgba(0,0,0,0.18); font-size:28px; display:none; cursor:pointer; z-index:20001;
+    align-items:center; justify-content:center; user-select:none; -webkit-user-select:none;
+}
+@media (max-width:480px) {
+    .floating-create { width:48px; height:48px; border-radius:24px; font-size:24px; }
+}
+`;
+document.head.appendChild(styleEl);
+
+// Position the floating button near the feed section but fixed so it won't be covered by relative containers
+function positionFloatingButton() {
+    const btn = document.getElementById('floatingCreate');
+    const feed = document.getElementById('feed-section');
+    if (!btn || !feed) return;
+    // compute bounding rect and place button at bottom-right of the feed card with some padding
+    const rect = feed.getBoundingClientRect();
+    const padding = 18;
+    // If feed is mostly off-screen, stick to bottom-right of viewport with margin
+    const fromRight = Math.max(padding, Math.min(window.innerWidth - (rect.right - padding), padding));
+    const topCandidate = rect.top + padding;
+    // Decide final coords: prefer top-right of the feed card, else bottom-right viewport
+    let top = window.scrollY + Math.max(rect.top + padding, 12);
+    let left = window.scrollX + rect.right - padding - btn.offsetWidth;
+    // if calculated left is outside viewport, clamp to viewport right edge minus padding
+    if (left + btn.offsetWidth > window.scrollX + window.innerWidth - padding) {
+        left = window.scrollX + window.innerWidth - padding - btn.offsetWidth;
+    }
+    if (left < window.scrollX + padding) left = window.scrollX + padding;
+    // apply position
+    btn.style.display = btn.style.display || 'flex';
+    btn.style.position = 'fixed';
+    btn.style.left = left + 'px';
+    btn.style.top = (top) + 'px';
+}
+
+// Reposition on load/resize/scroll
+window.addEventListener('resize', positionFloatingButton);
+window.addEventListener('scroll', positionFloatingButton);
+
+let loggedInUser = null;
+
+    // Logout link: when user is logged in it will perform logout; otherwise it links to the login page
+    document.getElementById('logoutLink').addEventListener('click', async function(e) {
+        if (!loggedInUser) return; // allow default link behavior (go to login.html)
+        e.preventDefault();
+        // show confirmation modal
+        const modal = document.getElementById('logoutModal');
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+    });
+
+    // Modal handlers
+    document.getElementById('logoutCancel').addEventListener('click', function() {
+        const modal = document.getElementById('logoutModal');
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    });
+
+    document.getElementById('logoutConfirm').addEventListener('click', async function() {
+        const modal = document.getElementById('logoutModal');
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+        const res = await fetch('/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (res.ok) {
+            loggedInUser = null;
+            updateAuthUI();
+            loadOnlineUsers();
+            // reload the page after logout to reset UI and client state
+            window.location.reload();
+        }
+    });
+
+function updateAuthUI() {
+    const logoutLink = document.getElementById('logoutLink');
+    const showLoginLink = document.getElementById('showLoginLink');
+    const userStatus = document.getElementById('userStatus');
+    if (loggedInUser) {
+        logoutLink.style.display = 'inline';
+        showLoginLink.style.display = 'none';
+        userStatus.textContent = 'Bejelentkezve: ' + loggedInUser;
+        logoutLink.href = '#';
+    } else {
+        logoutLink.style.display = 'none';
+        showLoginLink.style.display = 'inline';
+        userStatus.textContent = '';
+        logoutLink.href = 'login.html';
+    }
+}
+
+async function checkLoginStatus() {
+    try {
+        const res = await fetch('/me', { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            loggedInUser = data.username;
+        } else {
+            loggedInUser = null;
+        }
+    } catch (e) {
+        loggedInUser = null;
+    }
+    updateAuthUI();
+    // Immediately refresh role/ui state so the create button appears right after login
+    try { refreshUserRoles(); } catch (e) { /* ignore */ }
+}
+
+async function loadOnlineUsers() {
+    const ul = document.getElementById('online-users');
+    ul.innerHTML = '<li>Betöltés...</li>';
+    try {
+        const res = await fetch('/online-users', { credentials: 'include' });
+        if (!res.ok) {
+            ul.innerHTML = '<li>Hiba a betöltéskor</li>';
+            return;
+        }
+        const data = await res.json();
+        if (!data.users || data.users.length === 0) {
+            ul.innerHTML = '<li>Nincs online felhasználó</li>';
+            return;
+        }
+        ul.innerHTML = '';
+        data.users.forEach(user => {
+            const li = document.createElement('li');
+            li.textContent = user.username + (user.status ? ` (${user.status})` : '');
+            ul.appendChild(li);
+        });
+    } catch (e) {
+        ul.innerHTML = '<li>Hálózati hiba</li>';
+    }
+}
+setInterval(loadOnlineUsers, 10000);
+loadOnlineUsers();
+checkLoginStatus();
+// --- Posts / feed handling ---
+let currentRoles = [];
+
+async function refreshUserRoles() {
+    try {
+        const res = await fetch('/me', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        currentRoles = data.roles || [];
+    const composerModal = document.getElementById('composerModal');
+    const floating = document.getElementById('floatingCreate');
+        // For quick testing / convenience, show the create button to any logged-in user.
+        // This keeps admin checks server-side for actual permissions; the button is just a shortcut.
+        const isLoggedIn = !!data.username;
+        const isAdminRole = (currentRoles.includes('cantus_praeses') || currentRoles.includes('jegyzo')) || (data.isAllTimeAdmin === true);
+        const showButton = isLoggedIn || isAdminRole;
+        if (showButton && isAdminRole) {
+            if (floating) {
+                floating.style.display = 'flex';
+                // ensure correct placement
+                positionFloatingButton();
+            }
+        } else {
+            if (floating) floating.style.display = 'none';
+            if (composerModal) composerModal.style.display = 'none';
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Toolbar actions
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('button[data-cmd]');
+    if (!btn) return;
+    const cmd = btn.getAttribute('data-cmd');
+    const editor = document.getElementById('composer-editor');
+    editor.focus();
+    if (cmd === 'bold') document.execCommand('bold');
+    if (cmd === 'italic') document.execCommand('italic');
+    if (cmd === 'link') {
+        const url = prompt('URL (https://...)');
+        if (url) document.execCommand('createLink', false, url);
+    }
+    if (cmd === 'ul') document.execCommand('insertUnorderedList');
+});
+
+// Backwards-compat guard: older IDs `postCancel` / `postSubmit` may not exist anymore.
+const _postCancel = document.getElementById('postCancel');
+if (_postCancel) {
+    _postCancel.addEventListener('click', function() {
+        const ed = document.getElementById('composer-editor'); if (ed) ed.innerHTML = '';
+    });
+}
+
+const _postSubmit = document.getElementById('postSubmit');
+if (_postSubmit) {
+    _postSubmit.addEventListener('click', async function() {
+        const content = document.getElementById('composer-editor').innerHTML;
+        if (!content || content.trim().length === 0) { alert('Üres poszt'); return; }
+        try {
+            const res = await fetch('/posts', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content })
+            });
+            if (res.ok) {
+                const ed = document.getElementById('composer-editor'); if (ed) ed.innerHTML = '';
+                loadPosts();
+            } else {
+                const d = await res.json();
+                alert('Hiba: ' + (d.message || res.statusText));
+            }
+        } catch (e) { alert('Hálózati hiba'); }
+    });
+}
+
+async function loadPosts() {
+    const list = document.getElementById('posts-list');
+    const loading = document.getElementById('feed-loading');
+    loading.style.display = 'block';
+    list.innerHTML = '';
+    try {
+        const res = await fetch('/posts');
+        if (!res.ok) { loading.textContent = 'Hiba a betöltéskor'; return; }
+        const data = await res.json();
+        loading.style.display = 'none';
+        if (!data.posts || data.posts.length === 0) {
+            list.innerHTML = '<p>Nincsenek posztok</p>';
+            return;
+        }
+        data.posts.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'form-card';
+            card.style.marginBottom = '12px';
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            const author = document.createElement('div');
+            author.textContent = p.author_username + ' — ' + new Date(p.created_at).toLocaleString();
+            header.appendChild(author);
+            // delete button if allowed (we'll request deletion and server will check permissions)
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Törlés';
+            delBtn.className = 'ck-btn cancel';
+            delBtn.style.display = 'none';
+            delBtn.addEventListener('click', async () => {
+                if (!confirm('Biztosan törli a posztot?')) return;
+                const resp = await fetch('/posts/' + p.id, { method: 'DELETE', credentials: 'include' });
+                if (resp.ok) loadPosts(); else { const d = await resp.json(); alert(d.message || 'Hiba'); }
+            });
+            header.appendChild(delBtn);
+            card.appendChild(header);
+            const body = document.createElement('div');
+            body.innerHTML = p.content;
+            card.appendChild(body);
+            list.appendChild(card);
+            // if user is author or has role show delete
+            (async () => {
+                try {
+                    const me = await fetch('/me', { credentials: 'include' });
+                    if (!me.ok) return;
+                    const d = await me.json();
+                    const uname = d.username;
+                    const roles = d.roles || [];
+                    if (uname === p.author_username || roles.includes('cantus_praeses') || roles.includes('jegyzo')) {
+                        delBtn.style.display = 'inline-block';
+                    }
+                } catch (e) {}
+            })();
+        });
+    } catch (e) {
+        loading.textContent = 'Hálózati hiba';
+    }
+}
+
+// initial load
+setInterval(refreshUserRoles, 15000);
+refreshUserRoles();
+loadPosts();
+
+// Floating create button behavior
+const floatingBtn = document.getElementById('floatingCreate');
+if (floatingBtn) {
+    function openComposer(e) {
+        if (e) { e.preventDefault && e.preventDefault(); e.stopPropagation && e.stopPropagation(); }
+        const modal = document.getElementById('composerModal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        // ensure modal is above everything
+        modal.style.zIndex = 20000;
+        // focus after a short delay so the element is visible
+        setTimeout(()=>{ const ed = document.getElementById('composer-editor'); if (ed) ed.focus(); }, 120);
+    }
+    floatingBtn.addEventListener('click', function(e) { positionFloatingButton(); openComposer(e); });
+    // keyboard activation
+    floatingBtn.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { positionFloatingButton(); openComposer(ev); }
+    });
+}
+// Inline create button (header) binds to same composer opener
+// (no inline header button — only floating plus is used)
+
+// Composer modal handlers
+document.getElementById('composerCancel').addEventListener('click', function() {
+    const modal = document.getElementById('composerModal');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    document.getElementById('composer-editor').innerHTML = '';
+    document.getElementById('composer-files').value = '';
+    document.getElementById('composer-visibility').value = 'mindenki';
+});
+
+// close composer when clicking backdrop (but not when clicking inside modal)
+document.getElementById('composerModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.style.display = 'none';
+        this.setAttribute('aria-hidden', 'true');
+        document.getElementById('composer-editor').innerHTML = '';
+    }
+});
+
+// close composer on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const m = document.getElementById('composerModal');
+        if (m && m.style.display === 'flex') {
+            m.style.display = 'none';
+            m.setAttribute('aria-hidden', 'true');
+        }
+    }
+});
+
+document.getElementById('composerSubmit').addEventListener('click', async function() {
+    const content = document.getElementById('composer-editor').innerHTML;
+    const visibility = document.getElementById('composer-visibility').value;
+    const files = document.getElementById('composer-files').files;
+    if (!content || content.trim().length === 0) { alert('Üres poszt'); return; }
+    const fd = new FormData();
+    fd.append('content', content);
+    fd.append('visibility', visibility);
+    for (let i = 0; i < files.length; i++) fd.append('attachments', files[i]);
+    try {
+        const res = await fetch('/posts', { method: 'POST', credentials: 'include', body: fd });
+        if (res.ok) {
+            document.getElementById('composer-editor').innerHTML = '';
+            document.getElementById('composer-files').value = '';
+            document.getElementById('composer-visibility').value = 'mindenki';
+            document.getElementById('composerModal').style.display = 'none';
+            loadPosts();
+        } else {
+            const d = await res.json();
+            alert('Hiba: ' + (d.message || res.statusText));
+        }
+    } catch (e) { alert('Hálózati hiba'); }
+});
+</script>
+</body>
+</html>

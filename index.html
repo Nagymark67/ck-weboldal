@@ -5,6 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cantusok Köre</title>
     <link rel="stylesheet" href="ck_fooldal.css">
+        <style>
+        /* Simple modal styles for logout confirmation */
+        .ck-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            /* Raise modal above most page elements to avoid being covered */
+            z-index: 20000;
+        }
+        .ck-modal {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px 22px;
+            max-width: 520px;
+            width: calc(100% - 40px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+            color: #222;
+            font-family: inherit;
+        }
+        .ck-modal p { margin: 0 0 18px 0; line-height: 1.4; }
+        .ck-modal .ck-modal-actions { display:flex; gap:12px; justify-content:flex-end; }
+        .ck-btn { padding:8px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+    /* Ensure only the floating plus is visible as the create control */
+    button[title="Új poszt"]:not(#floatingCreate) { display: none !important; }
+        .ck-btn.affirm { background:#8B0000; color:#fff; border-color:#8B0000; }
+        .ck-btn.cancel { background:#fff; color:#8B0000; border-color:#8B0000; }
+        @media (max-width:480px) {
+            .ck-modal { padding:16px; }
+            .ck-modal .ck-modal-actions { flex-direction:column-reverse; }
+            .ck-btn { width:100%; }
+        }
+        </style>
 </head>
 
 
@@ -20,15 +55,27 @@
 </header>
 
     <div id="loginLinkContainer" style="text-align:right; margin: 10px 40px 0 0;">
-        <div id="loginLinksRow">
-        <a href="login.html" id="showLoginLink">Bejelentkezés</a>
-        <a href="#" id="logoutLink" style="display:none;">Kijelentkezés</a>
-        <a href="register.html" id="registerLink">Regisztráció</a>
-        </div>
+    <div id="loginLinksRow">
+    <a href="login.html" id="showLoginLink">Bejelentkezés</a>
+    <a href="login.html" id="logoutLink" style="display:none;">Kijelentkezés</a>
+    <a href="register.html" id="registerLink">Regisztráció</a>
+    </div>
+        <div id="userStatus" style="text-align:right; margin-top:6px; font-weight:600; color:#8B0000"></div>
         <aside id="member-list">
         <h2>Online felhasználók</h2>
         <ul id="online-users"></ul>
     </div>
+
+        <!-- Logout confirmation modal -->
+        <div id="logoutModal" class="ck-modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+            <div class="ck-modal" role="document">
+                <p>Sajnáljuk, hogy kilépni vágyakozol. Biztos ki szeretnél lépni?</p>
+                <div class="ck-modal-actions">
+                    <button id="logoutCancel" class="ck-btn cancel">Nem</button>
+                    <button id="logoutConfirm" class="ck-btn affirm">Igen</button>
+                </div>
+            </div>
+        </div>
 
     <main>
     <nav class="toc">
@@ -50,10 +97,43 @@
     </nav>
     <div class="content-container">
         <div class="main-sections center-sections">
+                <!-- Post composer and feed -->
+                <section id="feed-section" style="margin-bottom:20px; position:relative;">
+                    <h2>Hírek és események</h2>
+                    <!-- Composer modal (hidden by default) - act like logout modal -->
+                    <div id="composerModal" class="ck-modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" style="display:none;">
+                        <div class="ck-modal" role="document" style="max-width:760px;">
+                            <h3>Új poszt</h3>
+                            <div id="composer-toolbar" style="display:flex; gap:8px; margin-bottom:8px;">
+                                <button type="button" data-cmd="bold">B</button>
+                                <button type="button" data-cmd="italic">I</button>
+                                <button type="button" data-cmd="link">Link</button>
+                                <button type="button" data-cmd="ul">Lista</button>
+                            </div>
+                            <div id="composer-editor" contenteditable="true" style="min-height:160px; border:1px solid #e6e6e6; padding:12px; border-radius:8px; background:#fff;"></div>
+                            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+                                <label style="display:flex; gap:8px; align-items:center;">Csatolmányok: <input id="composer-files" type="file" multiple accept="image/*,video/*,application/pdf"></label>
+                                <label>Láthatóság: <select id="composer-visibility"><option value="mindenki">Mindenki</option><option value="tagok_es_tanitvanyok">Tagok és tanítványok</option><option value="csak_tagok">Csak tagok</option></select></label>
+                            </div>
+                            <div class="ck-modal-actions" style="margin-top:12px;">
+                                <button id="composerCancel" class="ck-btn cancel">Mégse</button>
+                                <button id="composerSubmit" class="ck-btn affirm">Posztolás</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="feed" style="margin-top:18px;">
+                        <p id="feed-loading">Betöltés...</p>
+                        <div id="posts-list"></div>
+                    </div>
+                    <!-- Create post button placed inside the feed card on the right (visible to admins) -->
+                    <button id="floatingCreate" aria-label="Új poszt" title="Új poszt" tabindex="0" role="button" class="floating-create" style="display:none">+</button>
+                </section>
             <section id="rolunk">
                 <h2>Rólunk</h2>
                 <p>placeholder</p>
             </section>
+            
             <section id="all-members">
     <h2>Tagok listája</h2>
 
@@ -130,7 +210,7 @@
         <li>Gajdán Bence a. BeszólÉSZ</li>
         <li>Kocsis Erik Donát a. Rumcájsz</li>
         <li>Szilasi Alfréd a. A kígyók [Szünet] kígyóznak</li>
-        <li>Nagy Márk v. Bombastic, avagy a két lábon járó jovialitás</li>
+        <li>Nagy Márk a. Burschazam</li>
         <li>Béres Máté v. Két gyíkot látok</li>
     </ul>
 
@@ -196,64 +276,365 @@
         <p>&copy; 2025 Cantusok Köre. Minden jog fenntartva.</p>
     </footer>
 <script>
+// floating button styles injected via JS-safe class
+const styleEl = document.createElement('style');
+styleEl.textContent = `
+.floating-create {
+    /* Hidden by default; JS will show to authorized users (admins). Keep a simple fixed bottom-right layout so
+       it never goes off-screen. Positioning logic should not compute absolute left/top from DOM rectangles. */
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    width:56px; height:56px; border-radius:28px; background:#8B0000; color:#fff; border:none;
+    box-shadow:0 8px 24px rgba(0,0,0,0.18); font-size:28px; display:none; cursor:pointer; z-index:20001;
+    align-items:center; justify-content:center; user-select:none; -webkit-user-select:none;
+}
+@media (max-width:480px) {
+    .floating-create { width:48px; height:48px; border-radius:24px; font-size:24px; }
+}
+`;
+document.head.appendChild(styleEl);
+
+// Position the floating button near the feed section but fixed so it won't be covered by relative containers
+function positionFloatingButton() {
+    // Keep the button pinned to bottom-right of the viewport. Don't compute absolute left/top from the feed
+    // bounding rect — that produced cases where the button could be placed off-screen.
+    const btn = document.getElementById('floatingCreate');
+    if (!btn) return;
+    btn.style.position = 'fixed';
+    btn.style.right = '18px';
+    btn.style.bottom = '18px';
+    // Ensure flex display when shown
+    if (btn.style.display === '' || btn.style.display === 'flex') btn.style.display = 'flex';
+}
+
+// Reposition on load/resize/scroll
+window.addEventListener('resize', positionFloatingButton);
+window.addEventListener('scroll', positionFloatingButton);
+
 let loggedInUser = null;
 
-document.getElementById('logoutLink').addEventListener('click', async function(e) {
-    e.preventDefault();
-    const res = await fetch('http://localhost:3000/logout', {
-        method: 'POST',
-        credentials: 'include'
+    // Logout link: when user is logged in it will perform logout; otherwise it links to the login page
+    document.getElementById('logoutLink').addEventListener('click', async function(e) {
+        if (!loggedInUser) return; // allow default link behavior (go to login.html)
+        e.preventDefault();
+        // show confirmation modal
+        const modal = document.getElementById('logoutModal');
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
     });
-    if (res.ok) {
-        loggedInUser = null;
-        document.getElementById('logoutLink').style.display = 'none';
-        document.getElementById('showLoginLink').style.display = 'inline';
-        loadOnlineUsers();
-    }
-});
 
-async function checkLoginStatus() {
-    const res = await fetch('http://localhost:3000/me', { credentials: 'include' });
-    if (res.ok) {
-        const data = await res.json();
-        loggedInUser = data.username;
-        document.getElementById('logoutLink').style.display = 'inline';
-        document.getElementById('showLoginLink').style.display = 'none';
+    // Modal handlers
+    document.getElementById('logoutCancel').addEventListener('click', function() {
+        const modal = document.getElementById('logoutModal');
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    });
+
+    document.getElementById('logoutConfirm').addEventListener('click', async function() {
+        const modal = document.getElementById('logoutModal');
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+        const res = await fetch('/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (res.ok) {
+            loggedInUser = null;
+            updateAuthUI();
+            loadOnlineUsers();
+            // reload the page after logout to reset UI and client state
+            window.location.reload();
+        }
+    });
+
+function updateAuthUI() {
+    const logoutLink = document.getElementById('logoutLink');
+    const showLoginLink = document.getElementById('showLoginLink');
+    const userStatus = document.getElementById('userStatus');
+    if (loggedInUser) {
+        logoutLink.style.display = 'inline';
+        showLoginLink.style.display = 'none';
+        userStatus.textContent = 'Bejelentkezve: ' + loggedInUser;
+        logoutLink.href = '#';
     } else {
-        loggedInUser = null;
-        document.getElementById('logoutLink').style.display = 'none';
-        document.getElementById('showLoginLink').style.display = 'inline';
+        logoutLink.style.display = 'none';
+        showLoginLink.style.display = 'inline';
+        userStatus.textContent = '';
+        logoutLink.href = 'login.html';
     }
 }
 
+async function checkLoginStatus() {
+    try {
+        const res = await fetch('/me', { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            loggedInUser = data.username;
+        } else {
+            loggedInUser = null;
+        }
+    } catch (e) {
+        loggedInUser = null;
+    }
+    updateAuthUI();
+    // Immediately refresh role/ui state so the create button appears right after login
+    try { refreshUserRoles(); } catch (e) { /* ignore */ }
+}
+
 async function loadOnlineUsers() {
-    const res = await fetch('http://localhost:3000/online-users', {
-        credentials: 'include'
-    });
     const ul = document.getElementById('online-users');
-    ul.innerHTML = '';
-    if (res.ok) {
+    ul.innerHTML = '<li>Betöltés...</li>';
+    try {
+        const res = await fetch('/online-users', { credentials: 'include' });
+        if (!res.ok) {
+            ul.innerHTML = '<li>Hiba a betöltéskor</li>';
+            return;
+        }
         const data = await res.json();
+        if (!data.users || data.users.length === 0) {
+            ul.innerHTML = '<li>Nincs online felhasználó</li>';
+            return;
+        }
+        ul.innerHTML = '';
         data.users.forEach(user => {
             const li = document.createElement('li');
             li.textContent = user.username + (user.status ? ` (${user.status})` : '');
             ul.appendChild(li);
         });
-        if (loggedInUser && data.users.some(u => u.username === loggedInUser)) {
-            document.getElementById('logoutLink').style.display = 'inline';
-            document.getElementById('showLoginLink').style.display = 'none';
-        } else {
-            document.getElementById('logoutLink').style.display = 'none';
-            document.getElementById('showLoginLink').style.display = 'inline';
-        }
-    } else {
-        document.getElementById('logoutLink').style.display = 'none';
-        document.getElementById('showLoginLink').style.display = 'inline';
+    } catch (e) {
+        ul.innerHTML = '<li>Hálózati hiba</li>';
     }
 }
 setInterval(loadOnlineUsers, 10000);
 loadOnlineUsers();
 checkLoginStatus();
+// --- Posts / feed handling ---
+let currentRoles = [];
+// runtime flag to indicate whether the current client should show admin-only UI
+window.isAdmin = false;
+
+async function refreshUserRoles() {
+    try {
+        const res = await fetch('/me', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        currentRoles = data.roles || [];
+    const composerModal = document.getElementById('composerModal');
+    const floating = document.getElementById('floatingCreate');
+        // Show the floating create button only to admin group: 'cantus_praeses', 'jegyzo' or special all-time admin.
+        // Server-side still enforces posting permissions; this only controls visibility of the UI affordance.
+        const isAdminRole = currentRoles.includes('cantus_praeses') || currentRoles.includes('jegyzo') || (data.isAllTimeAdmin === true);
+        // expose for other UI code
+        window.isAdmin = !!isAdminRole;
+        if (isAdminRole) {
+            if (floating) {
+                floating.style.display = 'flex';
+                positionFloatingButton();
+            }
+        } else {
+            if (floating) floating.style.display = 'none';
+            if (composerModal) composerModal.style.display = 'none';
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Toolbar actions
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('button[data-cmd]');
+    if (!btn) return;
+    const cmd = btn.getAttribute('data-cmd');
+    const editor = document.getElementById('composer-editor');
+    editor.focus();
+    if (cmd === 'bold') document.execCommand('bold');
+    if (cmd === 'italic') document.execCommand('italic');
+    if (cmd === 'link') {
+        const url = prompt('URL (https://...)');
+        if (url) document.execCommand('createLink', false, url);
+    }
+    if (cmd === 'ul') document.execCommand('insertUnorderedList');
+});
+
+// Backwards-compat guard: older IDs `postCancel` / `postSubmit` may not exist anymore.
+const _postCancel = document.getElementById('postCancel');
+if (_postCancel) {
+    _postCancel.addEventListener('click', function() {
+        const ed = document.getElementById('composer-editor'); if (ed) ed.innerHTML = '';
+    });
+}
+
+const _postSubmit = document.getElementById('postSubmit');
+if (_postSubmit) {
+    _postSubmit.addEventListener('click', async function() {
+        const content = document.getElementById('composer-editor').innerHTML;
+        if (!content || content.trim().length === 0) { alert('Üres poszt'); return; }
+        try {
+            const res = await fetch('/posts', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content })
+            });
+            if (res.ok) {
+                const ed = document.getElementById('composer-editor'); if (ed) ed.innerHTML = '';
+                loadPosts();
+            } else {
+                const d = await res.json();
+                alert('Hiba: ' + (d.message || res.statusText));
+            }
+        } catch (e) { alert('Hálózati hiba'); }
+    });
+}
+
+async function loadPosts() {
+    const list = document.getElementById('posts-list');
+    const loading = document.getElementById('feed-loading');
+    loading.style.display = 'block';
+    list.innerHTML = '';
+    try {
+        const res = await fetch('/posts');
+        if (!res.ok) { loading.textContent = 'Hiba a betöltéskor'; return; }
+        const data = await res.json();
+        loading.style.display = 'none';
+        if (!data.posts || data.posts.length === 0) {
+            list.innerHTML = '<p>Nincsenek posztok</p>';
+            return;
+        }
+        data.posts.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'form-card';
+            card.style.marginBottom = '12px';
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            const author = document.createElement('div');
+            author.textContent = p.author_username + ' — ' + new Date(p.created_at).toLocaleString();
+            header.appendChild(author);
+            // delete button if allowed (we'll request deletion and server will check permissions)
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Törlés';
+            delBtn.className = 'ck-btn cancel';
+            delBtn.style.display = 'none';
+            delBtn.addEventListener('click', async () => {
+                if (!confirm('Biztosan törli a posztot?')) return;
+                const resp = await fetch('/posts/' + p.id, { method: 'DELETE', credentials: 'include' });
+                if (resp.ok) loadPosts(); else { const d = await resp.json(); alert(d.message || 'Hiba'); }
+            });
+            header.appendChild(delBtn);
+            card.appendChild(header);
+            const body = document.createElement('div');
+            body.innerHTML = p.content;
+            card.appendChild(body);
+            list.appendChild(card);
+            // if user is author or has role show delete
+            (async () => {
+                try {
+                    const me = await fetch('/me', { credentials: 'include' });
+                    if (!me.ok) return;
+                    const d = await me.json();
+                    const uname = d.username;
+                    const roles = d.roles || [];
+                    if (uname === p.author_username || roles.includes('cantus_praeses') || roles.includes('jegyzo')) {
+                        delBtn.style.display = 'inline-block';
+                    }
+                } catch (e) {}
+            })();
+        });
+    } catch (e) {
+        loading.textContent = 'Hálózati hiba';
+    }
+}
+
+// initial load
+setInterval(refreshUserRoles, 15000);
+refreshUserRoles();
+loadPosts();
+
+// Floating create button behavior
+const floatingBtn = document.getElementById('floatingCreate');
+if (floatingBtn) {
+    function openComposer(e) {
+        if (e) { e.preventDefault && e.preventDefault(); e.stopPropagation && e.stopPropagation(); }
+        const modal = document.getElementById('composerModal');
+        if (!modal) return;
+        // Only allow opening composer for admins (server enforces permissions too)
+        if (!window.isAdmin) {
+            alert('Nincs jogosultsága új poszt létrehozására.');
+            return;
+        }
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        // ensure modal is above everything
+        modal.style.zIndex = 20000;
+        // focus after a short delay so the element is visible
+        setTimeout(()=>{ const ed = document.getElementById('composer-editor'); if (ed) ed.focus(); }, 120);
+    }
+    floatingBtn.addEventListener('click', function(e) { positionFloatingButton(); openComposer(e); });
+    // keyboard activation
+    floatingBtn.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { positionFloatingButton(); openComposer(ev); }
+    });
+}
+// Inline create button (header) binds to same composer opener
+// (no inline header button — only floating plus is used)
+
+// Composer modal handlers
+document.getElementById('composerCancel').addEventListener('click', function() {
+    const modal = document.getElementById('composerModal');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    document.getElementById('composer-editor').innerHTML = '';
+    document.getElementById('composer-files').value = '';
+    document.getElementById('composer-visibility').value = 'mindenki';
+});
+
+// close composer when clicking backdrop (but not when clicking inside modal)
+document.getElementById('composerModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.style.display = 'none';
+        this.setAttribute('aria-hidden', 'true');
+        document.getElementById('composer-editor').innerHTML = '';
+    }
+});
+
+// close composer on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const m = document.getElementById('composerModal');
+        if (m && m.style.display === 'flex') {
+            m.style.display = 'none';
+            m.setAttribute('aria-hidden', 'true');
+        }
+    }
+});
+
+document.getElementById('composerSubmit').addEventListener('click', async function() {
+    const content = document.getElementById('composer-editor').innerHTML;
+    const visibility = document.getElementById('composer-visibility').value;
+    const files = document.getElementById('composer-files').files;
+    if (!content || content.trim().length === 0) { alert('Üres poszt'); return; }
+    // Prevent non-admins from submitting — server also checks permissions
+    if (!window.isAdmin) { alert('Nincs jogosultsága új poszt létrehozására.'); return; }
+    const fd = new FormData();
+    fd.append('content', content);
+    fd.append('visibility', visibility);
+    for (let i = 0; i < files.length; i++) fd.append('attachments', files[i]);
+    try {
+        const res = await fetch('/posts', { method: 'POST', credentials: 'include', body: fd });
+        if (res.ok) {
+            document.getElementById('composer-editor').innerHTML = '';
+            document.getElementById('composer-files').value = '';
+            document.getElementById('composer-visibility').value = 'mindenki';
+            document.getElementById('composerModal').style.display = 'none';
+            loadPosts();
+        } else {
+            const d = await res.json();
+            alert('Hiba: ' + (d.message || res.statusText));
+        }
+    } catch (e) { alert('Hálózati hiba'); }
+});
 </script>
 </body>
 </html>

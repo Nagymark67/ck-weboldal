@@ -30,23 +30,50 @@
         © 2025 Cantusok Köre. Minden jog fenntartva.
     </footer>
     <script>
-    document.getElementById('loginForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const username = document.getElementById('username').value;
-        const password = document.getElementById('password').value;
-        const res = await fetch('http://localhost:3000/login', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+    // Improved login handler: show console logs and friendly alerts on network/server errors.
+    (function() {
+        const form = document.getElementById('loginForm');
+        const submitBtn = form.querySelector('button[type="submit"]');
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            if (!username || !password) { alert('Kérlek add meg a felhasználónevet és jelszót.'); return; }
+            // Disable button to prevent duplicate submits
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Bejelentkezés…'; }
+            try {
+                console.log('Attempting login for', username);
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (res.ok) {
+                    // Success — redirect to main page
+                    window.location.href = 'index.html';
+                    return;
+                }
+                // Try to parse JSON error body, but be tolerant of non-JSON replies
+                let errBody = null;
+                let nonJsonText = null;
+                try { errBody = await res.json(); } catch (parseErr) {
+                    // If the server returned HTML (or any non-JSON), capture the raw text for debugging
+                    try { nonJsonText = await res.text(); } catch (tErr) { nonJsonText = String(tErr); }
+                    console.warn('Non-JSON error from /login', parseErr, nonJsonText);
+                }
+                const message = (errBody && errBody.message) ? errBody.message : (nonJsonText ? nonJsonText : `HTTP ${res.status} ${res.statusText}`);
+                console.warn('Login failed:', message);
+                // Keep the alert concise but include the server text in console
+                alert('Sikertelen bejelentkezés! ' + (errBody && errBody.message ? errBody.message : `HTTP ${res.status} ${res.statusText}`));
+            } catch (networkErr) {
+                console.error('Network or fetch error during login', networkErr);
+                alert('Hálózati hiba: Nem sikerült kapcsolódni a szerverhez. Ellenőrizd, hogy a szerver fut.');
+            } finally {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Bejelentkezés'; }
+            }
         });
-        if (res.ok) {
-            window.location.href = "index.html";
-        } else {
-            const err = await res.json();
-            alert('Sikertelen bejelentkezés! ' + (err.message || ''));
-        }
-    });
+    })();
     </script>
 </body>
 </html>
