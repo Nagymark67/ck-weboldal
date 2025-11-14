@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <title>Admin - Felhasználókezelés</title>
+  <link rel="stylesheet" href="ck_fooldal.css">
+  <style>
+    body { padding:20px; font-family:inherit; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { padding:8px; border:1px solid #ddd; }
+    select { min-width:160px; }
+    .small { font-size:0.9em; color:#666; }
+  </style>
+</head>
+<body>
+  <h1>Admin felület</h1>
+  <p class="small">Csak<strong> admin</strong> fiókkal elérhető.</p>
+  <div id="notice"></div>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Felhasználónév</th><th>Státusz</th><th>Szerepek</th><th>Műveletek</th></tr>
+    </thead>
+    <tbody id="usersBody"><tr><td colspan="5">Betöltés...</td></tr></tbody>
+  </table>
+
+<script>
+(async function(){
+  async function showNotice(msg, err) {
+    const n = document.getElementById('notice');
+    n.textContent = msg; n.style.color = err ? 'crimson' : 'green';
+    setTimeout(()=>{ n.textContent = ''; }, 5000);
+  }
+  try {
+    // Check /me for admin
+    const me = await fetch('/me', { credentials: 'include' });
+    if (!me.ok) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Nem vagy bejelentkezve</td></tr>'; return; }
+    const md = await me.json();
+    if (!md.isAllTimeAdmin) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Nincs jogosultsága ennek az oldalnak az eléréséhez.</td></tr>'; return; }
+
+    const res = await fetch('/admin/users', { credentials: 'include' });
+    if (!res.ok) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Hiba a felhasználók lekérésekor</td></tr>'; return; }
+    const d = await res.json();
+    const tbody = document.getElementById('usersBody'); tbody.innerHTML = '';
+    const statuses = ['', 'Szimpatizáns','Tanítvány','Tag','Jegyző','Alapító','Cantus Praeses','Alapító'];
+    d.users.forEach(u => {
+      const tr = document.createElement('tr');
+      const rolesText = (u.roles && u.roles.length) ? u.roles.join(', ') : '';
+      tr.innerHTML = `<td>${u.id}</td><td>${u.username}</td><td></td><td>${rolesText}</td><td></td>`;
+      const statusCell = tr.children[2];
+      const opsCell = tr.children[4];
+      const sel = document.createElement('select');
+      ['', 'Szimpatizáns','Tanítvány','Tag','Jegyző','Alapító','Cantus Praeses'].forEach(s => {
+        const o = document.createElement('option'); o.value = s; o.text = s || '(nincs)';
+        if (s === u.status) o.selected = true;
+        sel.appendChild(o);
+      });
+      statusCell.appendChild(sel);
+      const saveBtn = document.createElement('button'); saveBtn.textContent = 'Mentés';
+      saveBtn.addEventListener('click', async () => {
+        const newStatus = sel.value || null;
+        const r = await fetch('/admin/users/' + u.id + '/status', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: newStatus }) });
+        if (r.ok) { showNotice('Státusz frissítve'); } else { showNotice('Hiba a mentéskor', true); }
+      });
+      opsCell.appendChild(saveBtn);
+
+      // role add/remove input
+      const roleInput = document.createElement('input'); roleInput.placeholder='role pl. cantus_praeses'; roleInput.style.marginLeft='8px';
+      const addBtn = document.createElement('button'); addBtn.textContent = 'Hozzáad';
+      addBtn.addEventListener('click', async () => {
+        const role = roleInput.value.trim(); if (!role) { showNotice('Írjon be egy szerepet', true); return; }
+        const r = await fetch('/admin/users/' + u.id + '/roles', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ role, action: 'add' }) });
+        if (r.ok) { showNotice('Szerep hozzáadva'); location.reload(); } else showNotice('Hiba', true);
+      });
+      const remBtn = document.createElement('button'); remBtn.textContent = 'Eltávolít';
+      remBtn.addEventListener('click', async () => {
+        const role = roleInput.value.trim(); if (!role) { showNotice('Írjon be egy szerepet', true); return; }
+        const r = await fetch('/admin/users/' + u.id + '/roles', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ role, action: 'remove' }) });
+        if (r.ok) { showNotice('Szerep eltávolítva'); location.reload(); } else showNotice('Hiba', true);
+      });
+      opsCell.appendChild(roleInput); opsCell.appendChild(addBtn); opsCell.appendChild(remBtn);
+
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Hiba: ' + (e.message || e) + '</td></tr>';
+  }
+})();
+</script>
+</body>
+</html>

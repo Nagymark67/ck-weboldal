@@ -35,6 +35,73 @@
         </div>
     </main>
     <script>
+    // Allowed founders (exact match). Keep this list in sync with server `allowedFounders`.
+    const allowedFounders = [
+        'Simon Gábor',
+        'Barak Antal',
+        'Bodnár Róbert',
+        'Fodor Ferenc',
+        'Czakó Gábor'
+    ];
+
+    // On load, query which reserved statuses are taken and disable those options.
+    // Also ensure 'Alapító' is only enabled when the typed username is one of the allowed founders.
+    async function refreshReservedStatuses() {
+        try {
+            const res = await fetch('/reserved-statuses');
+            if (!res.ok) return;
+            const data = await res.json();
+            const taken = data.taken || [];
+            const select = document.getElementById('regStatus');
+            for (const opt of select.options) {
+                // If the option's value is one of the reserved ones and currently taken, disable it and annotate
+                if ((opt.value === 'Cantus Praeses' || opt.value === 'Jegyző') && taken.includes(opt.value)) {
+                    opt.disabled = true;
+                    if (!opt.text.includes(' (foglalt)')) opt.text += ' (foglalt)';
+                } else {
+                    // Ensure it is enabled when available
+                    if (opt.text.includes(' (foglalt)')) opt.text = opt.text.replace(' (foglalt)', '');
+                    opt.disabled = false;
+                }
+            }
+            // Now enforce 'Alapító' availability based on typed username
+            const usernameInput = document.getElementById('regUsername');
+            const current = usernameInput.value.trim();
+            const alapOption = Array.from(select.options).find(o => o.value === 'Alapító');
+            if (alapOption) {
+                if (allowedFounders.includes(current)) {
+                    // enable only if not currently taken by DB (shouldn't be reserved)
+                    alapOption.disabled = false;
+                } else {
+                    alapOption.disabled = true;
+                    if (!alapOption.text.includes(' (csak alapítók)')) alapOption.text += ' (csak alapítók)';
+                }
+            }
+        } catch (e) {
+            // Non-fatal: leave the select as-is
+            console.warn('Could not refresh reserved statuses', e);
+        }
+    }
+
+    // Re-evaluate Alapító availability when the username input changes
+    document.getElementById('regUsername').addEventListener('input', function () {
+        const select = document.getElementById('regStatus');
+        const username = this.value.trim();
+        const alapOption = Array.from(select.options).find(o => o.value === 'Alapító');
+        if (!alapOption) return;
+        if (allowedFounders.includes(username)) {
+            alapOption.disabled = false;
+            alapOption.text = alapOption.text.replace(' (csak alapítók)', '');
+        } else {
+            alapOption.disabled = true;
+            if (!alapOption.text.includes(' (csak alapítók)')) alapOption.text += ' (csak alapítók)';
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        refreshReservedStatuses();
+    });
+
     document.getElementById('registerForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const username = document.getElementById('regUsername').value;
@@ -51,6 +118,8 @@
         window.location.href = 'index.html';
     } else {
         alert('Hiba: ' + (data.message || 'Ismeretlen hiba'));
+        // If the server responded that the status is taken, refresh availability in case of race
+        if (res.status === 403) await refreshReservedStatuses();
     }
 });
     </script>

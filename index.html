@@ -39,6 +39,34 @@
             .ck-modal .ck-modal-actions { flex-direction:column-reverse; }
             .ck-btn { width:100%; }
         }
+        /* Header admin button */
+        header { position: relative; }
+        #adminBtn {
+            position: absolute;
+            top: 10px;
+            right: 18px;
+            background: #222;
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: none;
+            z-index: 20002;
+            font-weight: 600;
+        }
+        @media (max-width:480px) {
+            #adminBtn { top: 8px; right: 12px; padding:6px 10px; font-size:14px; }
+        }
+        /* Hero block for top image */
+        .hero-block {
+            width: 100%;
+            height: 180px; /* modest height to avoid too much vertical space */
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+        }
+        @media (max-width:480px) { .hero-block { height: 120px; } }
         </style>
 </head>
 
@@ -52,7 +80,11 @@
     </div>
     <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
   </div>    
+        <!-- Admin button (visible only to all-time admin) -->
+        <button id="adminBtn" title="Admin felület">Admin</button>
 </header>
+
+    <!-- hero image will be placed near the Rólunk section -->
 
     <div id="loginLinkContainer" style="text-align:right; margin: 10px 40px 0 0;">
     <div id="loginLinksRow">
@@ -97,6 +129,12 @@
     </nav>
     <div class="content-container">
         <div class="main-sections center-sections">
+            <!-- Hero block placed directly above the Rólunk section -->
+            <div id="hero" class="hero-block" style="background-image: url('/uploads/hero.jpg');"></div>
+            <section id="rolunk">
+                <h2>Rólunk</h2>
+                <p>placeholder</p>
+            </section>
                 <!-- Post composer and feed -->
                 <section id="feed-section" style="margin-bottom:20px; position:relative;">
                     <h2>Hírek és események</h2>
@@ -129,10 +167,6 @@
                     <!-- Create post button placed inside the feed card on the right (visible to admins) -->
                     <button id="floatingCreate" aria-label="Új poszt" title="Új poszt" tabindex="0" role="button" class="floating-create" style="display:none">+</button>
                 </section>
-            <section id="rolunk">
-                <h2>Rólunk</h2>
-                <p>placeholder</p>
-            </section>
             
             <section id="all-members">
     <h2>Tagok listája</h2>
@@ -409,6 +443,43 @@ async function loadOnlineUsers() {
 setInterval(loadOnlineUsers, 10000);
 loadOnlineUsers();
 checkLoginStatus();
+// Presence ping control: send regular /online-ping while logged in and notify server on unload
+let _presenceInterval = null;
+async function sendOnlinePing() {
+    try {
+        await fetch('/online-ping', { method: 'POST', credentials: 'include', keepalive: true });
+    } catch (e) { /* ignore network errors */ }
+}
+function startPresencePing() {
+    if (_presenceInterval) return;
+    // ping immediately and then every 30s
+    sendOnlinePing();
+    _presenceInterval = setInterval(sendOnlinePing, 30 * 1000);
+}
+function stopPresencePing() {
+    if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+}
+
+// When login status changes start/stop presence ping
+const _origUpdateAuthUI = updateAuthUI;
+updateAuthUI = function() {
+    _origUpdateAuthUI();
+    if (loggedInUser) startPresencePing(); else stopPresencePing();
+};
+
+// On page unload/tab close inform the server that this client left so presence is updated fast.
+// Prefer navigator.sendBeacon (works in unload) and fall back to fetch with keepalive.
+window.addEventListener('unload', function() {
+    try {
+        if (navigator.sendBeacon) {
+            // sendBeacon will include cookies for same-origin requests
+            navigator.sendBeacon('/online-leave');
+        } else {
+            // best-effort fetch with keepalive
+            fetch('/online-leave', { method: 'POST', credentials: 'include', keepalive: true });
+        }
+    } catch (e) { /* ignore */ }
+});
 // --- Posts / feed handling ---
 let currentRoles = [];
 // runtime flag to indicate whether the current client should show admin-only UI
@@ -436,6 +507,18 @@ async function refreshUserRoles() {
             if (floating) floating.style.display = 'none';
             if (composerModal) composerModal.style.display = 'none';
         }
+        // Show admin button only to all-time admin
+        try {
+            const adminBtn = document.getElementById('adminBtn');
+            if (adminBtn) {
+                if (data.isAllTimeAdmin === true) {
+                    adminBtn.style.display = 'inline-block';
+                    adminBtn.addEventListener('click', function() { window.location.href = '/admin.html'; });
+                } else {
+                    adminBtn.style.display = 'none';
+                }
+            }
+        } catch (e) { /* ignore */ }
     } catch (e) {
         // ignore
     }

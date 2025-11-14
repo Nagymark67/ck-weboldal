@@ -50,6 +50,15 @@ const db = mysql.createPool({
   database: DB_NAME,
 });
 
+// Names allowed to register with 'Alapító' status (exact match)
+const allowedFounders = [
+  'Simon Gábor',
+  'Barak Antal',
+  'Bodnár Róbert',
+  'Fodor Ferenc',
+  'Czakó Gábor'
+];
+
 // CORS configuration: can be overridden with CORS_ORIGINS (comma-separated) or allow all with CORS_ALLOW_ALL=1
 const defaultOrigins = ['http://localhost', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5500'];
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : defaultOrigins;
@@ -113,6 +122,23 @@ app.post('/register', async (req, res) => {
   if (!username || !password || !status) return res.status(400).json({ message: 'Hiányzó adatok!' });
 
   try {
+    // Validate special statuses
+    // 1) 'Alapító' may only be chosen by a specific list of usernames
+    if (status === 'Alapító') {
+      if (!allowedFounders.includes(username)) {
+        return res.status(403).json({ message: 'Csak az Alapítóként megadott személyek választhatják ezt a státuszt.' });
+      }
+    }
+
+    // 2) Prevent more than one person from registering as the official officers
+    // Only allow a single 'Cantus Praeses' and a single 'Jegyző' in registered_users.status
+    const reservedStatuses = ['Cantus Praeses', 'Jegyző'];
+    if (reservedStatuses.includes(status)) {
+      const [taken] = await db.query('SELECT id FROM registered_users WHERE status = ? LIMIT 1', [status]);
+      if (taken && taken.length > 0) {
+        return res.status(403).json({ message: `${status} pozíciót már betöltik.` });
+      }
+    }
     // Check if user exists
     const [rows] = await db.query('SELECT id FROM registered_users WHERE username = ?', [username]);
     if (rows.length > 0) {
@@ -130,6 +156,8 @@ app.post('/register', async (req, res) => {
 });
 
 let onlineUsers = [];
+// In-memory last-seen timestamps for presence tracking: { username: epoch_ms }
+const onlineUsersLastSeen = {};
 
 
 app.use(bodyParser.json());
@@ -161,6 +189,7 @@ app.post('/login', async (req, res) => {
       if (match) {
         req.session.user = username;
         if (!onlineUsers.includes(username)) onlineUsers.push(username);
+        onlineUsersLastSeen[username] = Date.now();
         res.json({ success: true });
       } else {
         res.status(401).json({ success: false, message: 'Hibás felhasználónév vagy jelszó!' });
@@ -176,12 +205,15 @@ app.post('/login', async (req, res) => {
 
 app.get('/online-users', async (req, res) => {
   try {
-    // If there are no online users, return empty
-    if (onlineUsers.length === 0) return res.json({ users: [] });
-    const placeholders = onlineUsers.map(() => '?').join(',');
+    // Use last-seen timestamps to determine online users (timeout 45s)
+    const now = Date.now();
+    const timeout = 45 * 1000;
+    const active = Object.entries(onlineUsersLastSeen).filter(([u, t]) => (now - t) <= timeout).map(([u]) => u);
+    if (active.length === 0) return res.json({ users: [] });
+    const placeholders = active.map(() => '?').join(',');
     const [rows] = await db.query(
       `SELECT username, status FROM registered_users WHERE username IN (${placeholders})`,
-      onlineUsers
+      active
     );
     res.json({ users: rows }); // rows: [{username, status}, ...]
   } catch (err) {
@@ -190,19 +222,60 @@ app.get('/online-users', async (req, res) => {
   }
 });
 
+// Presence ping endpoint — clients should POST regularly to keep presence alive
+app.post('/online-ping', (req, res) => {
+  try {
+    const username = req.session && req.session.user;
+    if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
+    onlineUsersLastSeen[username] = Date.now();
+    if (!onlineUsers.includes(username)) onlineUsers.push(username);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in /online-ping', err);
+    res.status(500).json({ message: 'Error' });
+  }
+});
+
+// Allow clients to mark themselves as gone (remove from presence) without destroying session
+app.post('/online-leave', (req, res) => {
+  try {
+    const username = req.session && req.session.user;
+    if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
+    onlineUsers = onlineUsers.filter(u => u !== username);
+    try { delete onlineUsersLastSeen[username]; } catch (e) {}
+    // Do not destroy the session here; just update presence state
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in /online-leave', err);
+    res.status(500).json({ message: 'Error' });
+  }
+});
+
 app.get('/me', (req, res) => {
     if (req.session && req.session.user) {
         // Fetch roles for the user to assist in client-side UI decisions
         (async () => {
             try {
-                const [rows] = await db.query(
-                    `SELECT r.role_name FROM roles r JOIN user_roles ur ON ur.role_id = r.id JOIN registered_users u ON u.id = ur.user_id WHERE u.username = ?`,
-                    [req.session.user]
-                );
-        // Hide the special 'all-time admin' role from the client while exposing a flag
-        const roles = rows.map(r => r.role_name).filter(x => x !== 'all-time admin');
-        const isAllTimeAdmin = rows.some(r => r.role_name === 'all-time admin');
-        res.json({ username: req.session.user, roles, isAllTimeAdmin });
+        // Get user's roles and status in one shot
+        const [rows] = await db.query(
+          `SELECT u.status AS user_status, r.role_name FROM registered_users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id WHERE u.username = ?`,
+          [req.session.user]
+        );
+    // rows may contain multiple rows (one per role) or a single row with role_name null
+    const isAllTimeAdmin = rows.some(r => r.role_name === 'all-time admin');
+    // collect explicit roles (exclude all-time admin from client view)
+    const explicitRoles = Array.from(new Set(rows.map(r => r.role_name).filter(x => x && x !== 'all-time admin')));
+    // derive roles from user_status to keep backward compatibility with earlier registrations where status implied role
+    const status = rows.length > 0 ? (rows[0].user_status || null) : null;
+    const derivedRoles = [];
+    if (status) {
+      const s = String(status).trim();
+      if (s === 'Cantus Praeses') derivedRoles.push('cantus_praeses');
+      if (s === 'Jegyző') derivedRoles.push('jegyzo');
+      if (s === 'Alapító') derivedRoles.push('alapito');
+    }
+    const roles = Array.from(new Set([...explicitRoles, ...derivedRoles]));
+    res.json({ username: req.session.user, roles, isAllTimeAdmin });
             } catch (err) {
                 console.error('Error fetching roles for /me', err);
         res.json({ username: req.session.user, roles: [], isAllTimeAdmin: false });
@@ -312,8 +385,43 @@ app.delete('/posts/:id', async (req, res) => {
 app.post('/logout', (req, res) => {
   const username = req.session.user;
   onlineUsers = onlineUsers.filter(u => u !== username);
+  try { delete onlineUsersLastSeen[username]; } catch(e){}
   req.session.destroy();
   res.json({ success: true });
+});
+
+// Delete the currently logged-in user's account.
+// This removes the user_roles entries and the registered_users row so the status becomes available.
+app.post('/delete-account', async (req, res) => {
+  const username = req.session && req.session.user;
+  if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
+  try {
+    // Find user id
+    const [urows] = await db.query('SELECT id FROM registered_users WHERE username = ? LIMIT 1', [username]);
+    if (urows.length === 0) {
+      // If user not found, just destroy session and respond success
+      onlineUsers = onlineUsers.filter(u => u !== username);
+      req.session.destroy();
+      return res.json({ success: true, message: 'Felhasználó nem található, kiléptetve.' });
+    }
+    const userId = urows[0].id;
+
+    // Remove role assignments for this user
+    await db.query('DELETE FROM user_roles WHERE user_id = ?', [userId]);
+
+    // Remove the user record (this frees the status value for future registrations)
+    await db.query('DELETE FROM registered_users WHERE id = ?', [userId]);
+
+    // Remove from online list and destroy session
+  onlineUsers = onlineUsers.filter(u => u !== username);
+  try { delete onlineUsersLastSeen[username]; } catch(e){}
+    req.session.destroy();
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting account', err);
+    res.status(500).json({ message: 'Hiba a fiók törlésekor' });
+  }
 });
 
 // Start server and log the actual address info for debugging (IPv4 vs IPv6)
@@ -431,6 +539,23 @@ app.get('/debug/db-tables', async (req, res) => {
   }
 });
 
+// Return which reserved officer statuses are currently taken so the client can disable them in the UI
+app.get('/reserved-statuses', async (req, res) => {
+  try {
+    const reserved = ['Cantus Praeses', 'Jegyző'];
+    // Trim stored status values before comparing to be robust against whitespace differences
+    const [rows] = await db.query(
+      "SELECT DISTINCT TRIM(status) AS status FROM registered_users WHERE TRIM(status) IN (?, ?)",
+      reserved
+    );
+    const taken = rows.map(r => r.status).filter(Boolean);
+    res.json({ taken });
+  } catch (err) {
+    console.error('Error in /reserved-statuses', err);
+    res.status(500).json({ taken: [], error: String(err && err.message ? err.message : err) });
+  }
+});
+
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err && err.stack ? err.stack : err);
 });
@@ -440,4 +565,113 @@ app.use((err, req, res, next) => {
   console.error('Unhandled error middleware:', err && err.stack ? err.stack : err);
   if (res.headersSent) return next(err);
   res.status(500).json({ message: 'Internal server error', error: String(err && err.message ? err.message : err) });
+});
+
+// Admin API: list users (id, username, status, roles)
+app.get('/admin/users', async (req, res) => {
+  try {
+    const username = req.session && req.session.user;
+    console.log('/admin/users called; session user:', username);
+    if (!username) {
+      console.log('/admin/users - no session user (not logged in)');
+      return res.status(401).json({ message: 'Nincs bejelentkezve' });
+    }
+    const allowed = await userHasRole(username, ['all-time admin']);
+    console.log('/admin/users - userHasRole(all-time admin) =>', allowed);
+    if (!allowed) {
+      console.log(`/admin/users - access denied for ${username}`);
+      return res.status(403).json({ message: 'Nincs jogosultsága' });
+    }
+
+    const [rows] = await db.query(
+      `SELECT u.id, u.username, u.status, GROUP_CONCAT(r.role_name) AS roles
+       FROM registered_users u
+       LEFT JOIN user_roles ur ON ur.user_id = u.id
+       LEFT JOIN roles r ON r.id = ur.role_id
+       GROUP BY u.id`);
+    const users = rows.map(r => ({ id: r.id, username: r.username, status: r.status, roles: r.roles ? r.roles.split(',') : [] }));
+    res.json({ users });
+  } catch (err) {
+    console.error('Error in /admin/users', err && err.stack ? err.stack : err);
+    res.status(500).json({ message: 'DB error', error: String(err && err.message ? err.message : err) });
+  }
+});
+
+// Admin: update a user's status
+app.post('/admin/users/:id/status', async (req, res) => {
+  try {
+    const username = req.session && req.session.user;
+    console.log('/admin/users/:id/status called by', username, 'for id', req.params.id, 'body', req.body);
+    if (!username) {
+      console.log('/admin/users/:id/status - not logged in');
+      return res.status(401).json({ message: 'Nincs bejelentkezve' });
+    }
+    const allowed = await userHasRole(username, ['all-time admin']);
+    console.log('/admin/users/:id/status - userHasRole(all-time admin) =>', allowed);
+    if (!allowed) {
+      console.log(`/admin/users/:id/status - access denied for ${username}`);
+      return res.status(403).json({ message: 'Nincs jogosultsága' });
+    }
+    const userId = parseInt(req.params.id, 10);
+    const { status } = req.body;
+    if (!userId) return res.status(400).json({ message: 'Érvénytelen id' });
+    await db.query('UPDATE registered_users SET status = ? WHERE id = ?', [status || null, userId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in POST /admin/users/:id/status', err && err.stack ? err.stack : err);
+    res.status(500).json({ message: 'DB error', error: String(err && err.message ? err.message : err) });
+  }
+});
+
+// Admin: add/remove a role for a user
+app.post('/admin/users/:id/roles', async (req, res) => {
+  try {
+    const username = req.session && req.session.user;
+    console.log('/admin/users/:id/roles called by', username, 'for id', req.params.id, 'body', req.body);
+    if (!username) {
+      console.log('/admin/users/:id/roles - not logged in');
+      return res.status(401).json({ message: 'Nincs bejelentkezve' });
+    }
+    const allowed = await userHasRole(username, ['all-time admin']);
+    console.log('/admin/users/:id/roles - userHasRole(all-time admin) =>', allowed);
+    if (!allowed) {
+      console.log(`/admin/users/:id/roles - access denied for ${username}`);
+      return res.status(403).json({ message: 'Nincs jogosultsága' });
+    }
+    const userId = parseInt(req.params.id, 10);
+    const { role, action } = req.body; // action: 'add' or 'remove'
+    if (!userId || !role || !action) return res.status(400).json({ message: 'Hiányzó adatok' });
+
+    // Ensure role exists
+    const [rrows] = await db.query('SELECT id FROM roles WHERE role_name = ?', [role]);
+    let roleId;
+    if (rrows.length === 0) {
+      const [ins] = await db.query('INSERT INTO roles (role_name) VALUES (?)', [role]);
+      roleId = ins.insertId;
+    } else roleId = rrows[0].id;
+
+    if (action === 'add') {
+      await db.query('INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)', [userId, roleId]);
+    } else if (action === 'remove') {
+      await db.query('DELETE FROM user_roles WHERE user_id = ? AND role_id = ?', [userId, roleId]);
+    } else return res.status(400).json({ message: 'Érvénytelen művelet' });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in POST /admin/users/:id/roles', err && err.stack ? err.stack : err);
+    res.status(500).json({ message: 'DB error', error: String(err && err.message ? err.message : err) });
+  }
+});
+
+// Temporary debug endpoint to inspect session and admin-check quickly
+app.get('/admin/debug', async (req, res) => {
+  try {
+    const sessionUser = req.session && req.session.user;
+    console.log('/admin/debug called; session user:', sessionUser);
+    const isAdmin = sessionUser ? await userHasRole(sessionUser, ['all-time admin']) : false;
+    res.json({ sessionUser, isAllTimeAdmin: !!isAdmin });
+  } catch (err) {
+    console.error('Error in /admin/debug', err && err.stack ? err.stack : err);
+    res.status(500).json({ error: String(err && err.message ? err.message : err) });
+  }
 });
