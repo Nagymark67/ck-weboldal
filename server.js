@@ -164,7 +164,12 @@ app.use(bodyParser.json());
 app.use(session({
   secret: 'nagyon-titkos',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax' // Allow credentials in cross-origin requests from ngrok
+  }
 }));
 
 app.post('/login', async (req, res) => {

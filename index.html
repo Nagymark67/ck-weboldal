@@ -61,12 +61,12 @@
         /* Hero block for top image */
         .hero-block {
             width: 100%;
-            height: 180px; /* modest height to avoid too much vertical space */
+            height: 220px;
             background-size: cover;
             background-position: center center;
             background-repeat: no-repeat;
         }
-        @media (max-width:480px) { .hero-block { height: 120px; } }
+        @media (max-width:480px) { .hero-block { height: 140px; } }
         </style>
 </head>
 
@@ -110,6 +110,7 @@
         </div>
 
     <main>
+    <div id="hero" class="hero-block"><img src="/uploads/hero.jpg" alt="Cantusok Köre csoportképe"></div>
     <nav class="toc">
         <h2>Az Oldal Tartalma</h2>
         <ul>
@@ -129,7 +130,6 @@
     </nav>
     <div class="content-container">
         <div class="main-sections center-sections">
-            <div id="hero" class="hero-block" style="background-image: url('/uploads/hero.jpg');"></div>
             <section id="rolunk">
                 <h2>Rólunk</h2>
                 <p>placeholder</p>
@@ -408,11 +408,12 @@ async function checkLoginStatus() {
             loggedInUser = null;
         }
     } catch (e) {
+        console.error('Error checking login status:', e);
         loggedInUser = null;
     }
     updateAuthUI();
     // Immediately refresh role/ui state so the create button appears right after login
-    try { refreshUserRoles(); } catch (e) { /* ignore */ }
+    try { refreshUserRoles(); } catch (e) { console.error('Error refreshing roles:', e); }
 }
 
 async function loadOnlineUsers() {

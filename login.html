@@ -50,8 +50,10 @@
                     body: JSON.stringify({ username, password })
                 });
                 if (res.ok) {
-                    // Success — redirect to main page
-                    window.location.href = 'index.html';
+                    // Success — redirect to main page after a brief delay to ensure session is set
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 100);
                     return;
                 }
                 // Try to parse JSON error body, but be tolerant of non-JSON replies
