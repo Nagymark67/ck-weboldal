@@ -79,3 +79,28 @@ ngrok http 3000
 Notes:
 - When using ngrok from a different origin, consider setting `CORS_ALLOW_ALL=1` in your environment (for development only).
 - Do NOT expose production databases or secrets through ngrok without appropriate security.
+
+## Streamlit prototype
+
+The Streamlit app is an alternative interface for signing in and viewing the
+post feed. It uses the existing Express API for authentication and data, so
+start the Node server and MySQL database as described above before launching
+Streamlit. The Express session cookie is retained for each Streamlit browser
+session. The prototype displays post text and links to attachments; the
+existing HTML pages continue to provide the full site.
+
+On Windows, from the project directory:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+$env:CK_API_BASE_URL = 'http://localhost:3000'
+python -m streamlit run streamlit_app.py
+```
+
+Open the local URL printed by Streamlit (usually <http://localhost:8501>).
+For deployment, set `CK_API_BASE_URL` to the reachable Express API URL and
+install the packages in `requirements.txt`. Keep the Express API and its
+database accessible only as appropriate for your deployment; do not connect
+the Streamlit app directly to MySQL.
