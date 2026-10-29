@@ -1,5 +1,21 @@
 # Cantusok Köre Weboldal
 
+## PostgreSQL deployment
+
+The Express API uses PostgreSQL. Set one `DATABASE_URL` connection string
+instead of separate MySQL variables:
+
+```powershell
+$env:DATABASE_URL = 'postgresql://user:password@host:5432/database?sslmode=require'
+npm install
+npm start
+```
+
+The server creates the required tables and roles automatically at startup.
+Supabase, Neon, and Render PostgreSQL provide connection URLs suitable for
+this configuration. Keep `DATABASE_URL` in the hosting provider's secret
+environment variables; never commit it.
+
 ## Funkciók
 
 ### Backend (server.js)
@@ -24,24 +40,13 @@ A projekt 2025-ig védett. Minden jog fenntartva.
 
 ## Database setup
 
-If you haven't created the MySQL database used by the app, there's a helper SQL file at `db_init.sql`.
+The Express server creates its PostgreSQL tables automatically at startup.
+The older `db_init.sql` file is retained only for legacy MySQL installations.
 
-To create the database and table on Windows (using the MySQL command-line client):
+## Legacy MySQL setup
 
-1. Open a PowerShell window.
-2. Run (replace password if your root user has one):
-
-```powershell
-mysql -u root -p < db_init.sql
-```
-
-3. If MySQL server is not running, start it from Services or use the MySQL Shell / MySQL Notifier that came with your installation.
-
-Notes:
-- The `db_init.sql` creates a `users` database and a `registered_users` table.
-- The app uses database credentials in `server.js` (currently `root` / `P@ssw0rd!!`). Change these to match your MySQL setup or set up a dedicated MySQL user for the app.
-
-## Using XAMPP (recommended for a local MySQL)
+The following XAMPP instructions apply only to older versions of the project
+that used MySQL. They are not needed by the current PostgreSQL server.
 
 1. Download and install XAMPP from https://www.apachefriends.org/index.html (choose Windows).
 2. Start the Apache and MySQL services from the XAMPP Control Panel.
@@ -84,19 +89,14 @@ Notes:
 
 The Streamlit app provides separate Home, Login, and Register pages and uses
 the existing Express API for authentication, registration, and the post feed.
-The Express API retains each browser session's login cookie. MySQL and Express
+The Express API retains each browser session's login cookie. PostgreSQL and Express
 must both be running before the feed and account forms can work.
 
 On Windows, start Express in one PowerShell terminal from the project folder.
-Install Node.js first if `node` or `npm` is not recognized. Start MySQL (for
-example, from XAMPP), then configure the database environment variables and
-start the API:
+Install Node.js first if `node` or `npm` is not recognized. Configure `DATABASE_URL` for PostgreSQL, then start the API:
 
 ```powershell
-$env:DB_HOST = '127.0.0.1'
-$env:DB_USER = 'root'
-$env:DB_PASS = ''
-$env:DB_NAME = 'users'
+$env:DATABASE_URL = 'postgresql://user:password@host:5432/database?sslmode=require'
 $env:PORT = '3000'
 npm install
 npm start
@@ -121,7 +121,7 @@ Do not expose a development database or API publicly without securing it.
 ### Streamlit Community Cloud
 
 Community Cloud hosts the Streamlit interface, not this Express API. Deploy
-Express and MySQL separately to a host that can run Node.js and provides a
+Express and PostgreSQL separately to hosts that provide a
 reachable HTTPS API URL. In Streamlit Community Cloud, open the app's
 **Settings → Secrets** and add:
 

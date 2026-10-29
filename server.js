@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -36,19 +36,33 @@ const users = [
 ];
 */
 
-// DB config from environment variables with sensible defaults for local XAMPP setups
-// Respect empty strings (''), but fall back to defaults only when variables are undefined
-const DB_HOST = (process.env.DB_HOST !== undefined) ? process.env.DB_HOST : 'localhost';
-const DB_USER = (process.env.DB_USER !== undefined) ? process.env.DB_USER : 'root';
-const DB_PASS = (process.env.DB_PASS !== undefined) ? process.env.DB_PASS : '';
-const DB_NAME = (process.env.DB_NAME !== undefined) ? process.env.DB_NAME : 'users';
+// Supabase, Neon, Render PostgreSQL, and other hosted providers expose this URL.
+// Keep DATABASE_URL in environment variables; never commit database credentials.
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL is required. Set it to your PostgreSQL connection string.');
+  process.exit(1);
+}
 
-const db = mysql.createPool({
-  host: DB_HOST,
-  user: DB_USER,
-  password: DB_PASS,
-  database: DB_NAME,
+const db = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
+
+async function postgresQuery(sql, values = []) {
+  let index = 0;
+  const text = sql.replace(/\?/g, () => `$${++index}`);
+  const result = await db.query(text, values);
+  return [
+    result.rows,
+    {
+      insertId: result.rows[0] && result.rows[0].id,
+      affectedRows: result.rowCount
+    }
+  ];
+}
+
+const query = postgresQuery;
 
 // Names allowed to register with 'Alapító' status (exact match)
 const allowedFounders = [
@@ -134,20 +148,20 @@ app.post('/register', async (req, res) => {
     // Only allow a single 'Cantus Praeses' and a single 'Jegyző' in registered_users.status
     const reservedStatuses = ['Cantus Praeses', 'Jegyző'];
     if (reservedStatuses.includes(status)) {
-      const [taken] = await db.query('SELECT id FROM registered_users WHERE status = ? LIMIT 1', [status]);
+      const [taken] = await query('SELECT id FROM registered_users WHERE status = ? LIMIT 1', [status]);
       if (taken && taken.length > 0) {
         return res.status(403).json({ message: `${status} pozíciót már betöltik.` });
       }
     }
     // Check if user exists
-    const [rows] = await db.query('SELECT id FROM registered_users WHERE username = ?', [username]);
+    const [rows] = await query('SELECT id FROM registered_users WHERE username = ?', [username]);
     if (rows.length > 0) {
       return res.status(409).json({ message: 'A felhasználónév már foglalt!' });
     }
     // Hash the password before saving
     const salt = await bcrypt.genSalt(10);
     const hashed = await bcrypt.hash(password, salt);
-    await db.query('INSERT INTO registered_users (username, password, status) VALUES (?, ?, ?)', [username, hashed, status]);
+    await query('INSERT INTO registered_users (username, password, status) VALUES (?, ?, ?)', [username, hashed, status]);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -183,7 +197,7 @@ app.post('/login', async (req, res) => {
   const { username, password } = req.body;
   try {
     // Select by username only; password comparison is done with bcrypt.compare
-    const [rows] = await db.query(
+    const [rows] = await query(
       'SELECT * FROM registered_users WHERE username = ?',
       [username]
     );
@@ -216,7 +230,7 @@ app.get('/online-users', async (req, res) => {
     const active = Object.entries(onlineUsersLastSeen).filter(([u, t]) => (now - t) <= timeout).map(([u]) => u);
     if (active.length === 0) return res.json({ users: [] });
     const placeholders = active.map(() => '?').join(',');
-    const [rows] = await db.query(
+    const [rows] = await query(
       `SELECT username, status FROM registered_users WHERE username IN (${placeholders})`,
       active
     );
@@ -262,7 +276,7 @@ app.get('/me', (req, res) => {
         (async () => {
             try {
         // Get user's roles and status in one shot
-        const [rows] = await db.query(
+        const [rows] = await query(
           `SELECT u.status AS user_status, r.role_name FROM registered_users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id WHERE u.username = ?`,
           [req.session.user]
         );
@@ -297,13 +311,13 @@ async function userHasRole(username, requiredRoles = []) {
   if (!requiredRoles || requiredRoles.length === 0) return false;
   try {
     // First check if user is all-time admin; if so, grant access
-    const [isAdminRows] = await db.query(
+    const [isAdminRows] = await query(
       `SELECT 1 FROM roles r JOIN user_roles ur ON ur.role_id = r.id JOIN registered_users u ON u.id = ur.user_id WHERE u.username = ? AND r.role_name = 'all-time admin' LIMIT 1`,
       [username]
     );
     if (isAdminRows.length > 0) return true;
 
-    const [rows] = await db.query(
+    const [rows] = await query(
       `SELECT r.role_name FROM roles r JOIN user_roles ur ON ur.role_id = r.id JOIN registered_users u ON u.id = ur.user_id WHERE u.username = ? AND r.role_name IN (${requiredRoles.map(()=>'?').join(',')})`,
       [username, ...requiredRoles]
     );
@@ -329,9 +343,14 @@ app.get('/posts', async (req, res) => {
     if (req.session && req.session.user) {
       visibilityClause = "visibility IN ('mindenki','tagok_es_tanitvanyok','csak_tagok')";
     }
-    const [rows] = await db.query(`SELECT id, author_username, content, visibility, attachments, created_at FROM posts WHERE ${visibilityClause} ORDER BY created_at DESC LIMIT 50`);
+    const [rows] = await query(`SELECT id, author_username, content, visibility, attachments, created_at FROM posts WHERE ${visibilityClause} ORDER BY created_at DESC LIMIT 50`);
     // attachments stored as JSON string; parse before returning
-    const parsed = rows.map(r => ({ ...r, attachments: r.attachments ? JSON.parse(r.attachments) : [] }));
+    const parsed = rows.map(r => ({
+      ...r,
+      attachments: Array.isArray(r.attachments)
+        ? r.attachments
+        : (r.attachments ? JSON.parse(r.attachments) : [])
+    }));
     res.json({ posts: parsed });
   } catch (err) {
     console.error('Error fetching posts', err);
@@ -358,7 +377,7 @@ app.post('/posts', upload.array('attachments', 5), async (req, res) => {
         filePaths.push('/uploads/' + path.basename(f.path));
       }
     }
-    await db.query('INSERT INTO posts (author_username, content, visibility, attachments) VALUES (?, ?, ?, ?)', [username, safe, visibility, JSON.stringify(filePaths)]);
+    await query('INSERT INTO posts (author_username, content, visibility, attachments) VALUES (?, ?, ?, ?)', [username, safe, visibility, JSON.stringify(filePaths)]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error creating post', err);
@@ -373,13 +392,13 @@ app.delete('/posts/:id', async (req, res) => {
   const postId = parseInt(req.params.id, 10);
   if (!postId) return res.status(400).json({ message: 'Érvénytelen azonosító' });
   try {
-    const [rows] = await db.query('SELECT author_username FROM posts WHERE id = ?', [postId]);
+    const [rows] = await query('SELECT author_username FROM posts WHERE id = ?', [postId]);
     if (rows.length === 0) return res.status(404).json({ message: 'A poszt nem található' });
     const post = rows[0];
     const isAuthor = post.author_username === username;
     const hasRole = await userHasRole(username, ['cantus_praeses', 'jegyzo']);
     if (!isAuthor && !hasRole) return res.status(403).json({ message: 'Nincs jogosultsága törölni' });
-    await db.query('DELETE FROM posts WHERE id = ?', [postId]);
+    await query('DELETE FROM posts WHERE id = ?', [postId]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting post', err);
@@ -402,7 +421,7 @@ app.post('/delete-account', async (req, res) => {
   if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
   try {
     // Find user id
-    const [urows] = await db.query('SELECT id FROM registered_users WHERE username = ? LIMIT 1', [username]);
+    const [urows] = await query('SELECT id FROM registered_users WHERE username = ? LIMIT 1', [username]);
     if (urows.length === 0) {
       // If user not found, just destroy session and respond success
       onlineUsers = onlineUsers.filter(u => u !== username);
@@ -412,10 +431,10 @@ app.post('/delete-account', async (req, res) => {
     const userId = urows[0].id;
 
     // Remove role assignments for this user
-    await db.query('DELETE FROM user_roles WHERE user_id = ?', [userId]);
+    await query('DELETE FROM user_roles WHERE user_id = ?', [userId]);
 
     // Remove the user record (this frees the status value for future registrations)
-    await db.query('DELETE FROM registered_users WHERE id = ?', [userId]);
+    await query('DELETE FROM registered_users WHERE id = ?', [userId]);
 
     // Remove from online list and destroy session
   onlineUsers = onlineUsers.filter(u => u !== username);
@@ -433,42 +452,41 @@ app.post('/delete-account', async (req, res) => {
 // Ensure minimal schema (roles, user_roles, posts) exists before starting
 async function ensureSchema() {
   try {
-    await db.query(`
+    await query(`
+      CREATE TABLE IF NOT EXISTS registered_users (
+        id BIGSERIAL PRIMARY KEY,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        status VARCHAR(255),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await query(`
       CREATE TABLE IF NOT EXISTS roles (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        id BIGSERIAL PRIMARY KEY,
         role_name VARCHAR(100) NOT NULL,
-        PRIMARY KEY (id),
-        UNIQUE KEY ux_role_name (role_name)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        CONSTRAINT ux_role_name UNIQUE (role_name)
+      );
     `);
-    await db.query(`
+    await query(`
       CREATE TABLE IF NOT EXISTS user_roles (
-        user_id INT UNSIGNED NOT NULL,
-        role_id INT UNSIGNED NOT NULL,
+        user_id BIGINT NOT NULL REFERENCES registered_users(id) ON DELETE CASCADE,
+        role_id BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
         PRIMARY KEY (user_id, role_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      );
     `);
-    await db.query(`
+    await query(`
       CREATE TABLE IF NOT EXISTS posts (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        id BIGSERIAL PRIMARY KEY,
         author_username VARCHAR(100) NOT NULL,
         content TEXT NOT NULL,
-        visibility ENUM('mindenki', 'tagok_es_tanitvanyok', 'csak_tagok') NOT NULL DEFAULT 'mindenki',
-        attachments JSON NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        INDEX (author_username)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        visibility VARCHAR(40) NOT NULL DEFAULT 'mindenki'
+          CHECK (visibility IN ('mindenki', 'tagok_es_tanitvanyok', 'csak_tagok')),
+        attachments JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `);
-      // Ensure columns exist for older installations: add visibility/attachments if missing
-      const [colsVis] = await db.query("SHOW COLUMNS FROM posts LIKE 'visibility'");
-      if (!colsVis || colsVis.length === 0) {
-        try { await db.query("ALTER TABLE posts ADD COLUMN visibility ENUM('mindenki','tagok_es_tanitvanyok','csak_tagok') NOT NULL DEFAULT 'mindenki'"); } catch(e) { /* ignore */ }
-      }
-      const [colsAtt] = await db.query("SHOW COLUMNS FROM posts LIKE 'attachments'");
-      if (!colsAtt || colsAtt.length === 0) {
-        try { await db.query("ALTER TABLE posts ADD COLUMN attachments JSON NULL"); } catch(e) { /* ignore */ }
-      }
+    await query('CREATE INDEX IF NOT EXISTS posts_author_username_idx ON posts (author_username)');
   } catch (err) {
     console.error('Error ensuring schema', err);
     throw err;
@@ -481,7 +499,7 @@ async function ensureRolesAndAdminUser() {
   try {
     const rolesToEnsure = ['cantus_praeses', 'jegyzo', 'all-time admin'];
     for (const r of rolesToEnsure) {
-      await db.query('INSERT IGNORE INTO roles (role_name) VALUES (?)', [r]);
+      await query('INSERT INTO roles (role_name) VALUES (?) ON CONFLICT (role_name) DO NOTHING', [r]);
     }
 
     // Ensure the special all-time admin user exists and has the hidden role
@@ -489,23 +507,23 @@ async function ensureRolesAndAdminUser() {
     const adminPlainPassword = 'FErrari83493365.'; // provided by user — will be hashed
 
     // Check if user exists
-    const [urows] = await db.query('SELECT id FROM registered_users WHERE username = ?', [adminUsername]);
+    const [urows] = await query('SELECT id FROM registered_users WHERE username = ?', [adminUsername]);
     let userId;
     if (urows.length === 0) {
       const salt = await bcrypt.genSalt(10);
       const hashed = await bcrypt.hash(adminPlainPassword, salt);
-      const [res] = await db.query('INSERT INTO registered_users (username, password, status) VALUES (?, ?, ?)', [adminUsername, hashed, null]);
-      userId = res.insertId;
+      const [inserted] = await query('INSERT INTO registered_users (username, password, status) VALUES (?, ?, ?) RETURNING id', [adminUsername, hashed, null]);
+      userId = inserted[0].id;
       console.log('Created all-time admin user:', adminUsername);
     } else {
       userId = urows[0].id;
     }
 
     // Assign the all-time admin role
-    const [rrows] = await db.query('SELECT id FROM roles WHERE role_name = ?', ['all-time admin']);
+    const [rrows] = await query('SELECT id FROM roles WHERE role_name = ?', ['all-time admin']);
     if (rrows.length > 0) {
       const roleId = rrows[0].id;
-      await db.query('INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)', [userId, roleId]);
+      await query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT (user_id, role_id) DO NOTHING', [userId, roleId]);
     }
   } catch (err) {
     console.error('Error ensuring roles/admin user', err);
@@ -536,8 +554,8 @@ async function ensureRolesAndAdminUser() {
 // Remove this in production; it's intended to help local debugging.
 app.get('/debug/db-tables', async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?", [DB_NAME]);
-    res.json({ tables: rows.map(r => r.TABLE_NAME) });
+    const [rows] = await query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
+    res.json({ tables: rows.map(r => r.table_name) });
   } catch (err) {
     console.error('Error in /debug/db-tables', err && err.stack ? err.stack : err);
     res.status(500).json({ message: 'DB error', error: String(err && err.message ? err.message : err) });
@@ -549,7 +567,7 @@ app.get('/reserved-statuses', async (req, res) => {
   try {
     const reserved = ['Cantus Praeses', 'Jegyző'];
     // Trim stored status values before comparing to be robust against whitespace differences
-    const [rows] = await db.query(
+    const [rows] = await query(
       "SELECT DISTINCT TRIM(status) AS status FROM registered_users WHERE TRIM(status) IN (?, ?)",
       reserved
     );
@@ -588,8 +606,8 @@ app.get('/admin/users', async (req, res) => {
       return res.status(403).json({ message: 'Nincs jogosultsága' });
     }
 
-    const [rows] = await db.query(
-      `SELECT u.id, u.username, u.status, GROUP_CONCAT(r.role_name) AS roles
+    const [rows] = await query(
+      `SELECT u.id, u.username, u.status, STRING_AGG(r.role_name, ',') AS roles
        FROM registered_users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
        LEFT JOIN roles r ON r.id = ur.role_id
@@ -620,7 +638,7 @@ app.post('/admin/users/:id/status', async (req, res) => {
     const userId = parseInt(req.params.id, 10);
     const { status } = req.body;
     if (!userId) return res.status(400).json({ message: 'Érvénytelen id' });
-    await db.query('UPDATE registered_users SET status = ? WHERE id = ?', [status || null, userId]);
+    await query('UPDATE registered_users SET status = ? WHERE id = ?', [status || null, userId]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error in POST /admin/users/:id/status', err && err.stack ? err.stack : err);
@@ -648,17 +666,17 @@ app.post('/admin/users/:id/roles', async (req, res) => {
     if (!userId || !role || !action) return res.status(400).json({ message: 'Hiányzó adatok' });
 
     // Ensure role exists
-    const [rrows] = await db.query('SELECT id FROM roles WHERE role_name = ?', [role]);
+    const [rrows] = await query('SELECT id FROM roles WHERE role_name = ?', [role]);
     let roleId;
     if (rrows.length === 0) {
-      const [ins] = await db.query('INSERT INTO roles (role_name) VALUES (?)', [role]);
-      roleId = ins.insertId;
+      const [ins] = await query('INSERT INTO roles (role_name) VALUES (?) RETURNING id', [role]);
+      roleId = ins[0].id;
     } else roleId = rrows[0].id;
 
     if (action === 'add') {
-      await db.query('INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)', [userId, roleId]);
+      await query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT (user_id, role_id) DO NOTHING', [userId, roleId]);
     } else if (action === 'remove') {
-      await db.query('DELETE FROM user_roles WHERE user_id = ? AND role_id = ?', [userId, roleId]);
+      await query('DELETE FROM user_roles WHERE user_id = ? AND role_id = ?', [userId, roleId]);
     } else return res.status(400).json({ message: 'Érvénytelen művelet' });
 
     res.json({ success: true });
