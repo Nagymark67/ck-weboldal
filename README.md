@@ -80,16 +80,29 @@ Notes:
 - When using ngrok from a different origin, consider setting `CORS_ALLOW_ALL=1` in your environment (for development only).
 - Do NOT expose production databases or secrets through ngrok without appropriate security.
 
-## Streamlit prototype
+## Streamlit app
 
-The Streamlit app is an alternative interface for signing in and viewing the
-post feed. It uses the existing Express API for authentication and data, so
-start the Node server and MySQL database as described above before launching
-Streamlit. The Express session cookie is retained for each Streamlit browser
-session. The prototype displays post text and links to attachments; the
-existing HTML pages continue to provide the full site.
+The Streamlit app provides separate Home, Login, and Register pages and uses
+the existing Express API for authentication, registration, and the post feed.
+The Express API retains each browser session's login cookie. MySQL and Express
+must both be running before the feed and account forms can work.
 
-On Windows, from the project directory:
+On Windows, start Express in one PowerShell terminal from the project folder.
+Install Node.js first if `node` or `npm` is not recognized. Start MySQL (for
+example, from XAMPP), then configure the database environment variables and
+start the API:
+
+```powershell
+$env:DB_HOST = '127.0.0.1'
+$env:DB_USER = 'root'
+$env:DB_PASS = ''
+$env:DB_NAME = 'users'
+$env:PORT = '3000'
+npm install
+npm start
+```
+
+Leave that terminal running. In a second terminal, start Streamlit:
 
 ```powershell
 py -m venv .venv
@@ -99,8 +112,23 @@ $env:CK_API_BASE_URL = 'http://localhost:3000'
 python -m streamlit run streamlit_app.py
 ```
 
-Open the local URL printed by Streamlit (usually <http://localhost:8501>).
-For deployment, set `CK_API_BASE_URL` to the reachable Express API URL and
-install the packages in `requirements.txt`. Keep the Express API and its
-database accessible only as appropriate for your deployment; do not connect
-the Streamlit app directly to MySQL.
+Open the Streamlit URL (usually <http://localhost:8501>). `localhost` works
+only when Streamlit and Express run on the same computer. For a hosted
+Streamlit app, set `CK_API_BASE_URL` to an Express API URL that the Streamlit
+host can reach; the hosted app's `localhost` is not your personal computer.
+Do not expose a development database or API publicly without securing it.
+
+### Streamlit Community Cloud
+
+Community Cloud hosts the Streamlit interface, not this Express API. Deploy
+Express and MySQL separately to a host that can run Node.js and provides a
+reachable HTTPS API URL. In Streamlit Community Cloud, open the app's
+**Settings → Secrets** and add:
+
+```toml
+CK_API_BASE_URL = "https://your-express-api.example.com"
+```
+
+Do not use `http://localhost:3000` there: it points to the Streamlit host, not
+your computer. Never put database credentials or other secrets in the Git
+repository.
