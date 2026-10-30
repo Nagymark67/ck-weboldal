@@ -51,6 +51,8 @@
   const songName = 'Daltanítás';
   const songLocation = 'Liget Söröző';
   const canManageContent = (user) => user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role)));
+  let canManageEvents = false;
+  let rerenderEvents = null;
   const nextSong = (from = new Date()) => {
     const date = new Date(from);
     date.setHours(19, 0, 0, 0);
@@ -79,24 +81,34 @@
   }
   if (eventList) {
     const events = [{
+      id: 'szureti-mulatsag-2026',
       date: new Date(2026, 10, 14, 8, 30),
       title: 'Cantusok Köre Szüreti Mulatság',
       location: 'Liget Söröző',
       details: 'Immáron XIX. alkalommal kerül megrendezésre a Cantusok Köre Szüreti Mulatsága, melynek pontos időpontja november 14. napja lesz.\n\nA rendezvény hivatalos itala a szürethez híven, a bor lesz.\n\nBelépő: 6500 Ft, elsőéves BSC hallgatóknak 5000 Ft.\n\nProgramterv:\n09:00 Reggeli\n10:00–11:30 Tanítványok által játékos feladatok\n12:00 Ebéd vaddisznóhúsos pincepörkölttel a la Cantusok Köre\n13:00 (opcionális) Cantus verseny és söpröng\n13:00–17:30 Ismerkedés az ifjúsággal\n18:00 Nedvesest kezdete\n\nNovember 15.: Környes búcsú, utolsó nótázó.\n\nJelentkezés: forms.gle/bHwJE93sWEyFUCUL6',
       link: 'https://forms.gle/bHwJE93sWEyFUCUL6'
     }];
+    let deletedEventIds = [];
     try {
+      deletedEventIds = JSON.parse(localStorage.getItem('cantusok-deleted-events') || '[]');
+      if (!Array.isArray(deletedEventIds)) deletedEventIds = [];
       const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
-      if (Array.isArray(savedEvents)) savedEvents.forEach((event) => events.push({ ...event, date: new Date(event.date), endDate: event.endDate ? new Date(event.endDate) : new Date(new Date(event.date).getTime() + 3 * 60 * 60 * 1000) }));
+      if (Array.isArray(savedEvents)) savedEvents.forEach((event) => {
+        const id = event.id || `${event.date}|${event.title}`;
+        events.push({ ...event, id, date: new Date(event.date), endDate: event.endDate ? new Date(event.endDate) : new Date(new Date(event.date).getTime() + 3 * 60 * 60 * 1000) });
+      });
     } catch (error) {
       console.warn('Could not load saved events', error);
     }
     let date = nextSong();
     for (let i = 0; i < 52; i += 1) {
-      events.push({ date, title: songName, location: songLocation });
+      events.push({ id: `daltanitas-${date.toISOString()}`, date, title: songName, location: songLocation });
       date = new Date(date);
       date.setDate(date.getDate() + 7);
       if (date.getMonth() === 11 && date.getDate() === 25) date.setDate(date.getDate() + 7);
+    }
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      if (deletedEventIds.includes(events[index].id)) events.splice(index, 1);
     }
     const eventOccursOnDate = (event, date) => {
       const start = new Date(event.date);
@@ -136,6 +148,25 @@
           const registration = document.createElement('a');
           registration.className = 'button'; registration.href = event.link; registration.target = '_blank'; registration.rel = 'noopener'; registration.textContent = 'Jelentkezési űrlap';
           actions.appendChild(registration);
+        }
+        if (canManageEvents) {
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'button button-outline event-delete';
+          remove.setAttribute('aria-label', `${event.title} törlése`);
+          remove.textContent = '🗑';
+          remove.addEventListener('click', () => {
+            if (!window.confirm(`Biztosan törlöd ezt az eseményt?\n\n${event.title}`)) return;
+            const eventIndex = events.findIndex((item) => item.id === event.id);
+            if (eventIndex === -1) return;
+            events.splice(eventIndex, 1);
+            deletedEventIds.push(event.id);
+            localStorage.setItem('cantusok-deleted-events', JSON.stringify(deletedEventIds));
+            const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
+            localStorage.setItem('cantusok-events', JSON.stringify(savedEvents.filter((item) => (item.id || `${item.date}|${item.title}`) !== event.id)));
+            rerenderEvents?.();
+          });
+          actions.appendChild(remove);
         }
         item.appendChild(actions);
         eventList.appendChild(item);
@@ -219,6 +250,7 @@
       renderCalendar();
       if (noEvents) noEvents.hidden = visible.length > 0;
     };
+    rerenderEvents = renderEvents;
     search?.addEventListener('input', renderEvents);
     renderEvents();
     const eventButton = document.getElementById('addEventButton');
@@ -248,6 +280,7 @@
       const start = new Date(`${startDate}T${startTime}`);
       const finish = new Date(`${endDate}T${endTime}`);
       const created = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         title: String(form.get('title') || '').trim(),
         location: String(form.get('location') || '').trim(),
         date: start.toISOString(),
@@ -335,8 +368,9 @@
   }
   userPromise.then((user) => {
     const eventButton = document.getElementById('addEventButton');
-    const canManageEvents = user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role)));
+    canManageEvents = Boolean(user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role))));
     if (eventButton && canManageEvents) eventButton.hidden = false;
+    rerenderEvents?.();
     if (!user || !authLinks || !loggedInLinks) return;
     authLinks.hidden = true;
     loggedInLinks.hidden = false;
