@@ -1,81 +1,23 @@
 <!DOCTYPE html>
 <html lang="hu">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bejelentkezés – Cantusok Köre</title>
-    <link rel="stylesheet" href="ck_fooldal.css">
-</head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Bejelentkezés | Cantusok Köre</title><link rel="stylesheet" href="ck_fooldal.css"></head>
 <body>
-    <header>
-        <div class="header-flex">
-            <div class="logo-container">
-                <a href="index.html"><img src="ck_cimer_szines.png" alt="Cantusok Köre Logó" class="logo"></a>
-            </div>
-            <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
-        </div>
-    </header>
-    <main>
-        <div class="form-card">
-            <h2>Bejelentkezés</h2>
-            <form id="loginForm">
-                <input type="text" id="username" placeholder="Felhasználónév" required>
-                <input type="password" id="password" placeholder="Jelszó" required>
-                <button type="submit">Bejelentkezés</button>
-            </form>
-            <p>Még nincs fiókod? <a href="register.html">Regisztráció</a></p>
-        </div>
-    </main>
-    <footer>
-        © 2025 Cantusok Köre. Minden jog fenntartva.
-    </footer>
-    <script>
-    // Improved login handler: show console logs and friendly alerts on network/server errors.
-    (function() {
-        const form = document.getElementById('loginForm');
-        const submitBtn = form.querySelector('button[type="submit"]');
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            if (!username || !password) { alert('Kérlek add meg a felhasználónevet és jelszót.'); return; }
-            // Disable button to prevent duplicate submits
-            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Bejelentkezés…'; }
-            try {
-                console.log('Attempting login for', username);
-                const res = await fetch('/login', {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                if (res.ok) {
-                    // Success — redirect to main page after a brief delay to ensure session is set
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 100);
-                    return;
-                }
-                // Try to parse JSON error body, but be tolerant of non-JSON replies
-                let errBody = null;
-                let nonJsonText = null;
-                try { errBody = await res.json(); } catch (parseErr) {
-                    // If the server returned HTML (or any non-JSON), capture the raw text for debugging
-                    try { nonJsonText = await res.text(); } catch (tErr) { nonJsonText = String(tErr); }
-                    console.warn('Non-JSON error from /login', parseErr, nonJsonText);
-                }
-                const message = (errBody && errBody.message) ? errBody.message : (nonJsonText ? nonJsonText : `HTTP ${res.status} ${res.statusText}`);
-                console.warn('Login failed:', message);
-                // Keep the alert concise but include the server text in console
-                alert('Sikertelen bejelentkezés! ' + (errBody && errBody.message ? errBody.message : `HTTP ${res.status} ${res.statusText}`));
-            } catch (networkErr) {
-                console.error('Network or fetch error during login', networkErr);
-                alert('Hálózati hiba: Nem sikerült kapcsolódni a szerverhez. Ellenőrizd, hogy a szerver fut.');
-            } finally {
-                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Bejelentkezés'; }
-            }
-        });
-    })();
-    </script>
+  <header class="site-header"><div class="header-inner"><a class="brand" href="index.html"><img src="ck_cimer_szines.png" alt="Cantusok Köre logó"><span>Cantusok Köre</span></a><a class="button button-light" href="index.html">Főoldal</a></div></header>
+  <main class="page-shell"><div class="form-card"><p class="eyebrow">Üdv újra</p><h2>Bejelentkezés</h2><form id="loginForm"><input type="text" id="username" placeholder="Felhasználónév" autocomplete="username" required><input type="password" id="password" placeholder="Jelszó" autocomplete="current-password" required><button type="submit">Bejelentkezés</button></form><p>Még nincs fiókod? <a href="register.html">Regisztráció</a></p><p id="loginMessage" class="news-meta"></p></div></main><footer>© 2026 Cantusok Köre. Minden jog fenntartva.</footer>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = document.getElementById('loginMessage');
+      const button = event.currentTarget.querySelector('button');
+      button.disabled = true; button.textContent = 'Bejelentkezés…';
+      try {
+        const response = await fetch('/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.value, password: password.value }) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+        window.location.href = 'index.html';
+      } catch (error) { message.textContent = `Sikertelen bejelentkezés: ${error.message}`; }
+      finally { button.disabled = false; button.textContent = 'Bejelentkezés'; }
+    });
+  </script>
 </body>
 </html>

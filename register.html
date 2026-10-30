@@ -1,127 +1,39 @@
 <!DOCTYPE html>
 <html lang="hu">
-<head>
-    <meta charset="UTF-8">
-    <title>Regisztráció</title>
-    <link rel="stylesheet" href="ck_fooldal.css">
-</head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Regisztráció | Cantusok Köre</title><link rel="stylesheet" href="ck_fooldal.css"></head>
 <body>
-    <header>
-        <div class="header-flex">
-            <div class="logo-container">
-                <img src="ck_cimer_szines.png" alt="Cantusok Köre Logó" class="logo">
-            </div>
-            <img src="vivatselmec.png" alt="Vivat Selmec Banner" class="banner-img">
-        </div>
-    </header>
-    <main>
-        <div class="form-card">
-            <h2>Regisztráció</h2>
-            <form id="registerForm">
-                <input type="text" id="regUsername" placeholder="Felhasználónév" required>
-                <input type="password" id="regPassword" placeholder="Jelszó" required>
-                <select id="regStatus" required>
-                    <option value="" disabled selected>Ki vagy?</option>
-                    <option value="Szimpatizáns">Szimpatizáns</option>
-                    <option value="Tanítvány">Tanítvány</option>
-                    <option value="Tag">Tag</option>
-                    <option value="Jegyző">Jegyző</option>
-                    <option value="Alapító">Alapító</option>
-                    <option value="Cantus Praeses">Cantus Praeses</option>
-                </select>
-                <button type="submit">Regisztráció</button>
-            </form>
-            <p><a href="index.html">Vissza a főoldalra</a></p>
-        </div>
-    </main>
-    <script>
-    // Allowed founders (exact match). Keep this list in sync with server `allowedFounders`.
-    const allowedFounders = [
-        'Simon Gábor',
-        'Barak Antal',
-        'Bodnár Róbert',
-        'Fodor Ferenc',
-        'Czakó Gábor'
-    ];
-
-    // On load, query which reserved statuses are taken and disable those options.
-    // Also ensure 'Alapító' is only enabled when the typed username is one of the allowed founders.
+  <header class="site-header"><div class="header-inner"><a class="brand" href="index.html"><img src="ck_cimer_szines.png" alt="Cantusok Köre logó"><span>Cantusok Köre</span></a><a class="button button-light" href="index.html">Főoldal</a></div></header>
+  <main class="page-shell"><div class="form-card"><p class="eyebrow">Csatlakozz hozzánk</p><h2>Regisztráció</h2><form id="registerForm"><input type="text" id="regUsername" placeholder="Felhasználónév" autocomplete="username" required><input type="password" id="regPassword" placeholder="Jelszó" autocomplete="new-password" required><select id="regStatus" required><option value="" disabled selected>Ki vagy?</option><option value="Szimpatizáns">Szimpatizáns</option><option value="Tanítvány">Tanítvány</option><option value="Tag">Tag</option><option value="Jegyző">Jegyző</option><option value="Alapító">Alapító</option><option value="Cantus Praeses">Cantus Praeses</option></select><button type="submit">Regisztráció</button></form><p id="registerMessage" class="news-meta"></p><p>Már van fiókod? <a href="login.html">Bejelentkezés</a></p></div></main><footer>© 2026 Cantusok Köre. Minden jog fenntartva.</footer>
+  <script>
+    const allowedFounders = ['Simon Gábor', 'Barak Antal', 'Bodnár Róbert', 'Fodor Ferenc', 'Czakó Gábor'];
+    const statusSelect = document.getElementById('regStatus');
     async function refreshReservedStatuses() {
-        try {
-            const res = await fetch('/reserved-statuses');
-            if (!res.ok) return;
-            const data = await res.json();
-            const taken = data.taken || [];
-            const select = document.getElementById('regStatus');
-            for (const opt of select.options) {
-                // If the option's value is one of the reserved ones and currently taken, disable it and annotate
-                if ((opt.value === 'Cantus Praeses' || opt.value === 'Jegyző') && taken.includes(opt.value)) {
-                    opt.disabled = true;
-                    if (!opt.text.includes(' (foglalt)')) opt.text += ' (foglalt)';
-                } else {
-                    // Ensure it is enabled when available
-                    if (opt.text.includes(' (foglalt)')) opt.text = opt.text.replace(' (foglalt)', '');
-                    opt.disabled = false;
-                }
-            }
-            // Now enforce 'Alapító' availability based on typed username
-            const usernameInput = document.getElementById('regUsername');
-            const current = usernameInput.value.trim();
-            const alapOption = Array.from(select.options).find(o => o.value === 'Alapító');
-            if (alapOption) {
-                if (allowedFounders.includes(current)) {
-                    // enable only if not currently taken by DB (shouldn't be reserved)
-                    alapOption.disabled = false;
-                } else {
-                    alapOption.disabled = true;
-                    if (!alapOption.text.includes(' (csak alapítók)')) alapOption.text += ' (csak alapítók)';
-                }
-            }
-        } catch (e) {
-            // Non-fatal: leave the select as-is
-            console.warn('Could not refresh reserved statuses', e);
-        }
+      try {
+        const response = await fetch('/reserved-statuses');
+        if (!response.ok) return;
+        const taken = (await response.json()).taken || [];
+        [...statusSelect.options].forEach((option) => {
+          const reserved = option.value === 'Cantus Praeses' || option.value === 'Jegyző';
+          option.disabled = reserved && taken.includes(option.value);
+        });
+      } catch (error) { console.warn('Could not refresh reserved statuses', error); }
     }
-
-    // Re-evaluate Alapító availability when the username input changes
-    document.getElementById('regUsername').addEventListener('input', function () {
-        const select = document.getElementById('regStatus');
-        const username = this.value.trim();
-        const alapOption = Array.from(select.options).find(o => o.value === 'Alapító');
-        if (!alapOption) return;
-        if (allowedFounders.includes(username)) {
-            alapOption.disabled = false;
-            alapOption.text = alapOption.text.replace(' (csak alapítók)', '');
-        } else {
-            alapOption.disabled = true;
-            if (!alapOption.text.includes(' (csak alapítók)')) alapOption.text += ' (csak alapítók)';
-        }
+    document.getElementById('regUsername').addEventListener('input', (event) => {
+      const founder = [...statusSelect.options].find((option) => option.value === 'Alapító');
+      if (founder) founder.disabled = !allowedFounders.includes(event.target.value.trim());
     });
-
-    document.addEventListener('DOMContentLoaded', function() {
-        refreshReservedStatuses();
+    refreshReservedStatuses();
+    document.getElementById('registerForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = document.getElementById('registerMessage');
+      try {
+        const response = await fetch('/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: regUsername.value, password: regPassword.value, status: statusSelect.value }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+        message.textContent = 'Sikeres regisztráció! Átirányítás…';
+        window.location.href = 'login.html';
+      } catch (error) { message.textContent = `Hiba: ${error.message}`; await refreshReservedStatuses(); }
     });
-
-    document.getElementById('registerForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const username = document.getElementById('regUsername').value;
-    const password = document.getElementById('regPassword').value;
-    const status = document.getElementById('regStatus').value;
-    const res = await fetch('/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, status })
-    });
-    const data = await res.json();
-    if (res.ok) {
-        alert('Sikeres regisztráció! Most már bejelentkezhetsz.');
-        window.location.href = 'index.html';
-    } else {
-        alert('Hiba: ' + (data.message || 'Ismeretlen hiba'));
-        // If the server responded that the status is taken, refresh availability in case of race
-        if (res.status === 403) await refreshReservedStatuses();
-    }
-});
-    </script>
+  </script>
 </body>
 </html>
