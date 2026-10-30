@@ -7,15 +7,16 @@
   <script>
     document.getElementById('loginForm').addEventListener('submit', async (event) => {
       event.preventDefault();
+      const loginForm = event.currentTarget;
       const message = document.getElementById('loginMessage');
-      const button = event.currentTarget.querySelector('button');
+      const button = loginForm.querySelector('button');
       button.disabled = true; button.textContent = 'Bejelentkezés…';
       try {
-        const response = await fetch('/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.value, password: password.value }) });
+        const response = await fetch('/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.getElementById('username').value.trim(), password: document.getElementById('password').value }) });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
         if (data.requiresPasswordChange) {
-          event.currentTarget.hidden = true;
+          loginForm.hidden = true;
           document.getElementById('passwordResetForm').hidden = false;
           message.textContent = 'A folytatáshoz új jelszót kell beállítanod.';
           return;
