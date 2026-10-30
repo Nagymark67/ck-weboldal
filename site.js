@@ -4,10 +4,9 @@
   const savedTheme = localStorage.getItem('cantusok-theme');
   if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
   const nav = document.querySelector('.site-nav');
-  const controlHost = nav || document.querySelector('.header-inner');
-  if (header && controlHost) {
+  if (header) {
     const themeButton = document.createElement('button');
-    themeButton.className = 'theme-toggle';
+    themeButton.className = 'theme-toggle floating-theme-toggle';
     themeButton.type = 'button';
     const updateThemeLabel = () => { themeButton.textContent = document.documentElement.dataset.theme === 'dark' ? 'Világos' : 'Sötét'; };
     updateThemeLabel();
@@ -18,10 +17,10 @@
       updateThemeLabel();
     });
     const bugButton = document.createElement('button');
-    bugButton.className = 'bug-report-toggle';
+    bugButton.className = 'bug-report-toggle floating-bug-toggle';
     bugButton.type = 'button';
     bugButton.textContent = 'Hibajelentés';
-    controlHost.append(themeButton, bugButton);
+    document.body.append(themeButton, bugButton);
     bugButton.addEventListener('click', () => { const modal = document.getElementById('bugReportModal'); if (modal) modal.hidden = false; });
   }
   if (header) {
@@ -266,6 +265,7 @@
   checkUser().then((user) => {
     if (canCreate(user) && createButton && composer) {
       createButton.style.display = 'block';
+      body.classList.add('can-create-post');
       createButton.addEventListener('click', () => composer.classList.add('open'));
     }
   });
