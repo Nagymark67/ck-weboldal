@@ -26,6 +26,11 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit per file
+const galleryUpload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype))
+});
 
 
 /*
@@ -415,6 +420,40 @@ app.delete('/posts/:id', async (req, res) => {
   }
 });
 
+app.get('/gallery', async (req, res) => {
+  try {
+    const [rows] = await query('SELECT id, image_url, alt_text, created_at FROM gallery_images ORDER BY created_at ASC');
+    res.json({ images: rows });
+  } catch (err) {
+    console.error('Error fetching gallery images', err);
+    res.status(500).json({ message: 'A galéria betöltése nem sikerült' });
+  }
+});
+
+app.post('/gallery', galleryUpload.single('image'), async (req, res) => {
+  const username = req.session && req.session.user;
+  if (!username) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    return res.status(401).json({ message: 'Nincs bejelentkezve' });
+  }
+  try {
+    const allowed = await userHasRole(username, ['cantus_praeses', 'jegyzo']);
+    if (!allowed) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(403).json({ message: 'Nincs jogosultsága képet feltölteni' });
+    }
+    if (!req.file) return res.status(400).json({ message: 'Kép feltöltése kötelező' });
+    const imageUrl = '/uploads/' + path.basename(req.file.path);
+    const altText = String(req.body.altText || 'A Cantusok Köre közös fotója').trim().slice(0, 200);
+    await query('INSERT INTO gallery_images (image_url, alt_text, uploaded_by) VALUES (?, ?, ?)', [imageUrl, altText, username]);
+    res.json({ success: true, image: { image_url: imageUrl, alt_text: altText } });
+  } catch (err) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    console.error('Error uploading gallery image', err);
+    res.status(500).json({ message: 'A kép feltöltése nem sikerült' });
+  }
+});
+
 app.post('/logout', (req, res) => {
   const username = req.session.user;
   onlineUsers = onlineUsers.filter(u => u !== username);
@@ -492,6 +531,15 @@ async function ensureSchema() {
         visibility VARCHAR(40) NOT NULL DEFAULT 'mindenki'
           CHECK (visibility IN ('mindenki', 'tagok_es_tanitvanyok', 'csak_tagok')),
         attachments JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await query(`
+      CREATE TABLE IF NOT EXISTS gallery_images (
+        id BIGSERIAL PRIMARY KEY,
+        image_url TEXT NOT NULL,
+        alt_text VARCHAR(200) NOT NULL DEFAULT 'A Cantusok Köre közös fotója',
+        uploaded_by VARCHAR(100) NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);

@@ -133,7 +133,10 @@ button, .button { cursor: pointer; }
 .photo-card { overflow: hidden; padding: 0; background: #fff; border-radius: 18px; box-shadow: var(--shadow); }
 .photo-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; transition: transform .35s ease; }
 .photo-card:hover img { transform: scale(1.04); }
-.photo-card figcaption { padding: 14px 16px 16px; color: var(--wine); font-weight: 700; }
+.add-photo-button { display: block; margin: 24px auto 0; }
+#addPhotoButton[hidden] { display: none; }
+.photo-card:last-child:nth-child(3n + 1),
+.photo-card:nth-last-child(2):nth-child(3n + 1) { grid-column: 2; }
 .roulette-card { width: min(760px, 100%); margin: 0 auto; text-align: center; }
 .roulette-stage { padding: clamp(24px, 6vw, 58px) 18px; border-radius: 20px; background: radial-gradient(circle at 50% 0, #fff, var(--wine-soft)); }
 .roulette-result, .roulette-song { color: var(--wine); font-size: clamp(1.7rem, 5vw, 3rem); font-weight: 800; line-height: 1.15; min-height: 1.3em; }
@@ -196,6 +199,8 @@ footer { padding: 28px 16px; color: var(--muted); text-align: center; }
   body.nav-open .site-nav { transform: translateX(0); }
   .site-nav a { padding: 14px 16px; }
   .home-grid, .feature-grid, .photo-grid { grid-template-columns: 1fr; }
+  .photo-card:last-child:nth-child(3n + 1),
+  .photo-card:nth-last-child(2):nth-child(3n + 1) { grid-column: auto; }
   .hero { min-height: 470px; border-radius: 0 0 24px 24px; }
   .page-shell { width: min(100% - 20px, 1180px); padding-top: 24px; }
 }

@@ -5,6 +5,7 @@
   const search = document.getElementById('eventSearch');
   const songName = 'Daltanítás';
   const songLocation = 'Liget Söröző';
+  const canManageContent = (user) => user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role)));
   const nextSong = (from = new Date()) => {
     const date = new Date(from);
     date.setHours(19, 0, 0, 0);
@@ -139,6 +140,38 @@
       console.warn('Could not check login state', error);
       return null;
     }
+    const photoGrid = document.querySelector('.photo-grid');
+    if (photoGrid) {
+      fetch('/gallery', { credentials: 'include' }).then((response) => response.ok ? response.json() : { images: [] }).then((data) => {
+        (data.images || []).forEach((image) => {
+          const figure = document.createElement('figure');
+          figure.className = 'photo-card';
+          const photo = document.createElement('img');
+          photo.src = image.image_url;
+          photo.alt = image.alt_text;
+          figure.appendChild(photo);
+          photoGrid.appendChild(figure);
+        });
+      }).catch((error) => console.warn('Could not load gallery images', error));
+      checkUser().then((user) => {
+        const addPhotoButton = document.getElementById('addPhotoButton');
+        if (!addPhotoButton || !canManageContent(user)) return;
+        addPhotoButton.hidden = false;
+        const photoModal = document.getElementById('photoModal');
+        const closePhotoModal = () => { if (photoModal) photoModal.hidden = true; };
+        addPhotoButton.addEventListener('click', () => { photoModal.hidden = false; });
+        document.getElementById('closePhotoModal')?.addEventListener('click', closePhotoModal);
+        document.getElementById('cancelPhoto')?.addEventListener('click', closePhotoModal);
+        document.getElementById('photoForm')?.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const message = document.getElementById('photoMessage');
+          const response = await fetch('/gallery', { method: 'POST', credentials: 'include', body: new FormData(event.currentTarget) });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) { message.textContent = result.message || 'A feltöltés nem sikerült.'; return; }
+          window.location.reload();
+        });
+      });
+    }
   }
   checkUser().then((user) => {
     const eventButton = document.getElementById('addEventButton');
@@ -159,7 +192,7 @@
   const feedLoading = document.getElementById('feed-loading');
   const composer = document.getElementById('composer');
   const createButton = document.getElementById('floatingCreate');
-  const canCreate = (user) => user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role)));
+  const canCreate = canManageContent;
   function renderPost(post) {
     const article = document.createElement('article');
     article.className = 'news-post';
