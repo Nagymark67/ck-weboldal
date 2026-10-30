@@ -62,13 +62,11 @@
   };
   const googleCalendarUrl = (date, event = {}) => {
     const pad = (value) => String(value).padStart(2, '0');
-    const start = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T190000`;
-    const end = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T220000`;
     const title = event.title || songName;
     const location = event.location || songLocation;
     const details = event.details || 'Heti nótázás a Cantusok Körével.';
-    const endDate = new Date(date.getTime() + 3 * 60 * 60 * 1000);
-    const endTime = `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`;
+    const eventEnd = event.endDate ? new Date(event.endDate) : new Date(date.getTime() + 3 * 60 * 60 * 1000);
+    const endTime = `${eventEnd.getFullYear()}${pad(eventEnd.getMonth() + 1)}${pad(eventEnd.getDate())}T${pad(eventEnd.getHours())}${pad(eventEnd.getMinutes())}00`;
     const customTime = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}00`;
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${customTime}/${endTime}&ctz=Europe%2FBudapest&location=${encodeURIComponent(location)}&details=${encodeURIComponent(details)}`;
   };
@@ -89,7 +87,7 @@
     }];
     try {
       const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
-      if (Array.isArray(savedEvents)) savedEvents.forEach((event) => events.push({ ...event, date: new Date(event.date) }));
+      if (Array.isArray(savedEvents)) savedEvents.forEach((event) => events.push({ ...event, date: new Date(event.date), endDate: event.endDate ? new Date(event.endDate) : new Date(new Date(event.date).getTime() + 3 * 60 * 60 * 1000) }));
     } catch (error) {
       console.warn('Could not load saved events', error);
     }
@@ -100,9 +98,18 @@
       date.setDate(date.getDate() + 7);
       if (date.getMonth() === 11 && date.getDate() === 25) date.setDate(date.getDate() + 7);
     }
+    const eventOccursOnDate = (event, date) => {
+      const start = new Date(event.date);
+      const end = new Date(event.endDate || event.date);
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+      return start < dayEnd && end > dayStart;
+    };
+    const dateInputValue = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    let selectedCalendarDate = new Date(2026, 9, 1);
     const renderEventDetails = (visible, selectedDate) => {
       eventList.replaceChildren();
-      const selectedEvents = visible.filter((event) => event.date.getFullYear() === selectedDate.getFullYear() && event.date.getMonth() === selectedDate.getMonth() && event.date.getDate() === selectedDate.getDate());
+      const selectedEvents = visible.filter((event) => eventOccursOnDate(event, selectedDate));
       selectedEvents.forEach((event) => {
         const item = document.createElement('article');
         item.className = 'event-item';
@@ -110,7 +117,8 @@
         const title = document.createElement('h3');
         title.textContent = event.title;
         const metadata = document.createElement('p');
-        metadata.textContent = `${formatDate(event.date)} · ${event.location}`;
+        const eventEnd = event.endDate ? new Date(event.endDate) : new Date(event.date.getTime() + 3 * 60 * 60 * 1000);
+        metadata.textContent = `${formatDate(event.date)}–${formatDate(eventEnd)} · ${event.location}`;
         content.append(title, metadata);
         if (event.details) {
           const details = document.createElement('p');
@@ -179,7 +187,7 @@
           if (index < offset) { calendar.appendChild(document.createElement('span')).className = 'calendar-empty'; continue; }
           const day = index - offset + 1;
           const cellDate = new Date(year, month, day);
-          const cellEvents = visible.filter((event) => event.date.getFullYear() === year && event.date.getMonth() === month && event.date.getDate() === day);
+          const cellEvents = visible.filter((event) => eventOccursOnDate(event, cellDate));
           const cell = document.createElement('button');
           cell.type = 'button'; cell.className = 'calendar-day'; cell.setAttribute('role', 'gridcell');
           if (today.toDateString() === cellDate.toDateString()) cell.classList.add('today');
@@ -194,11 +202,12 @@
             more.className = 'calendar-event-more'; more.textContent = `+${cellEvents.length - 3} további`;
             cell.appendChild(more);
           }
-          cell.addEventListener('click', () => { selectedDate = cellDate; calendar.querySelectorAll('.calendar-day.selected').forEach((item) => item.classList.remove('selected')); cell.classList.add('selected'); renderEventDetails(visible, selectedDate); });
+          cell.addEventListener('click', () => { selectedDate = cellDate; selectedCalendarDate = cellDate; calendar.querySelectorAll('.calendar-day.selected').forEach((item) => item.classList.remove('selected')); cell.classList.add('selected'); renderEventDetails(visible, selectedDate); });
           calendar.appendChild(cell);
         }
-        const monthEvents = visible.filter((event) => event.date.getFullYear() === year && event.date.getMonth() === month);
-        if (!monthEvents.some((event) => event.date.toDateString() === selectedDate.toDateString())) selectedDate = monthEvents[0]?.date || selectedDate;
+        const monthEvents = visible.filter((event) => Array.from({ length: daysInMonth }, (_, index) => eventOccursOnDate(event, new Date(year, month, index + 1))).some(Boolean));
+        if (!monthEvents.some((event) => eventOccursOnDate(event, selectedDate))) selectedDate = monthEvents[0]?.date || selectedDate;
+        selectedCalendarDate = selectedDate;
         const selectedCell = [...calendar.querySelectorAll('.calendar-day')].find((cell) => cell.querySelector('.calendar-day-number')?.textContent === String(selectedDate.getDate()));
         selectedCell?.classList.add('selected');
         renderEventDetails(visible, selectedDate);
@@ -216,23 +225,52 @@
     const eventModal = document.getElementById('eventModal');
     const eventForm = document.getElementById('eventForm');
     const closeEventModal = () => { if (eventModal) eventModal.hidden = true; };
-    eventButton?.addEventListener('click', () => { if (eventModal) eventModal.hidden = false; });
+    eventButton?.addEventListener('click', () => {
+      const startDate = document.getElementById('eventStartDate');
+      const startTime = document.getElementById('eventStartTime');
+      const endDate = document.getElementById('eventEndDate');
+      const endTime = document.getElementById('eventEndTime');
+      if (startDate) startDate.value = dateInputValue(selectedCalendarDate);
+      if (startTime) startTime.value = '19:00';
+      if (endDate) { endDate.value = dateInputValue(selectedCalendarDate); endDate.min = dateInputValue(selectedCalendarDate); }
+      if (endTime) endTime.value = '22:00';
+      if (eventModal) eventModal.hidden = false;
+    });
     document.getElementById('closeEventModal')?.addEventListener('click', closeEventModal);
     document.getElementById('cancelEvent')?.addEventListener('click', closeEventModal);
     eventForm?.addEventListener('submit', (event) => {
       event.preventDefault();
       const form = new FormData(eventForm);
+      const startDate = String(form.get('startDate') || '');
+      const startTime = String(form.get('startTime') || '');
+      const endDate = String(form.get('endDate') || '');
+      const endTime = String(form.get('endTime') || '');
+      const start = new Date(`${startDate}T${startTime}`);
+      const finish = new Date(`${endDate}T${endTime}`);
       const created = {
         title: String(form.get('title') || '').trim(),
         location: String(form.get('location') || '').trim(),
-        date: new Date(String(form.get('date'))).toISOString(),
+        date: start.toISOString(),
+        endDate: finish.toISOString(),
         details: String(form.get('description') || '').trim()
       };
-      if (!created.title || !created.location || Number.isNaN(new Date(created.date).getTime())) return;
+      if (!created.title || !created.location || Number.isNaN(start.getTime()) || Number.isNaN(finish.getTime())) {
+        eventForm.reportValidity();
+        return;
+      }
+      if (finish <= start) {
+        const endTimeInput = document.getElementById('eventEndTime');
+        if (endTimeInput) {
+          endTimeInput.setCustomValidity('A befejezésnek a kezdés után kell lennie.');
+          endTimeInput.reportValidity();
+          endTimeInput.setCustomValidity('');
+        }
+        return;
+      }
       const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
       savedEvents.push(created);
       localStorage.setItem('cantusok-events', JSON.stringify(savedEvents));
-      events.push({ ...created, date: new Date(created.date) });
+      events.push({ ...created, date: start, endDate: finish });
       eventForm.reset();
       closeEventModal();
       renderEvents();
