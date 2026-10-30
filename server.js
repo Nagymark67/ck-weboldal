@@ -75,14 +75,17 @@ const allowedFounders = [
 
 // CORS configuration: can be overridden with CORS_ORIGINS (comma-separated) or allow all with CORS_ALLOW_ALL=1
 const defaultOrigins = ['http://localhost', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5500'];
-const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : defaultOrigins;
+const normalizeOrigin = (origin) => origin.trim().replace(/\/+$/, '');
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(normalizeOrigin).filter(Boolean)
+  : defaultOrigins;
 // Allow all origins when developing locally (NODE_ENV != 'production') or when explicitly set.
 const allowAll = process.env.CORS_ALLOW_ALL === '1' || process.env.NODE_ENV !== 'production';
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true); // allow non-browser or same-origin requests
-    if (allowAll || allowedOrigins.includes(origin)) return callback(null, true);
+    if (allowAll || allowedOrigins.includes(normalizeOrigin(origin))) return callback(null, true);
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true
