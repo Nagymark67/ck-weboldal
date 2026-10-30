@@ -154,9 +154,6 @@ body.can-create-post .floating-bug-toggle { bottom: 94px; }
 [data-theme="dark"] .form-card input,
 [data-theme="dark"] .form-card select,
 [data-theme="dark"] .form-card textarea { border-color: var(--surface-border); background: var(--paper); color: var(--ink); }
-.month-picker { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 20px; }
-.month-button { border: 1px solid var(--surface-border); border-radius: 999px; padding: 9px 8px; background: var(--paper); color: var(--muted); cursor: pointer; text-transform: capitalize; }
-.month-button:hover, .month-button.active { border-color: var(--wine); background: var(--wine-soft); color: var(--wine); }
 .calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 14px; }
 .calendar-heading h2 { margin: 0; color: var(--wine); font-size: 1.5rem; text-transform: capitalize; }
 .calendar-nav { width: 40px; height: 40px; border: 1px solid var(--surface-border); border-radius: 50%; background: var(--paper); color: var(--wine); font-size: 1.7rem; line-height: 1; cursor: pointer; }
@@ -320,7 +317,6 @@ footer { padding: 28px 16px; color: var(--muted); text-align: center; }
   .calendar-toolbar input, .calendar-toolbar .button { width: 100%; }
   .year-picker { width: 100%; justify-content: space-between; }
   .year-picker select { flex: 1; }
-  .month-picker { grid-template-columns: repeat(3, 1fr); }
   .calendar { gap: 3px; }
   .calendar-empty, .calendar-day { min-height: 76px; }
   .calendar-day { padding: 5px; border-radius: 8px; }

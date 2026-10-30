@@ -138,39 +138,31 @@
       const query = (search?.value || '').trim().toLocaleLowerCase('hu-HU');
       const visible = events.filter((event) => `${event.title} ${event.location} ${formatDate(event.date)}`.toLocaleLowerCase('hu-HU').includes(query));
       const yearPicker = document.getElementById('eventYear');
-      const monthPicker = document.getElementById('monthPicker');
       const calendarTitle = document.getElementById('calendarTitle');
       const previousMonth = document.getElementById('previousMonth');
       const nextMonthButton = document.getElementById('nextMonth');
       const noEvents = document.getElementById('noEvents');
-      const monthNames = Array.from({ length: 12 }, (_, month) => new Date(2020, month, 1).toLocaleString('hu-HU', { month: 'long' }));
-      const currentYear = new Date().getFullYear();
-      const years = [...new Set([currentYear - 1, currentYear, currentYear + 1, currentYear + 2, ...events.map((event) => event.date.getFullYear())])].sort((a, b) => a - b);
+      const minimumYear = 2026;
+      const minimumMonth = 9;
+      const currentYear = Math.max(new Date().getFullYear(), minimumYear);
+      const years = [...new Set([minimumYear, currentYear, currentYear + 1, currentYear + 2, ...events.map((event) => event.date.getFullYear()).filter((year) => year >= minimumYear)])].sort((a, b) => a - b);
       if (yearPicker && !yearPicker.options.length) {
         years.forEach((year) => yearPicker.add(new Option(String(year), String(year))));
-        yearPicker.value = String(new Date().getFullYear());
+        yearPicker.value = String(currentYear);
       }
-      let month = Number(calendar?.dataset.month || new Date().getMonth());
+      let month = Number(calendar?.dataset.month || (currentYear === minimumYear ? minimumMonth : new Date().getMonth()));
       const setYear = (year) => {
         if (!yearPicker) return;
+        year = Math.max(minimumYear, year);
         if (!Array.from(yearPicker.options).some((option) => option.value === String(year))) yearPicker.add(new Option(String(year), String(year)));
         yearPicker.value = String(year);
       };
       const renderCalendar = () => {
-        const year = Number(yearPicker?.value || selectedMonth);
+        const year = Math.max(minimumYear, Number(yearPicker?.value || currentYear));
+        if (year === minimumYear && month < minimumMonth) month = minimumMonth;
         if (calendar) calendar.dataset.month = String(month);
         if (calendarTitle) calendarTitle.textContent = new Date(year, month, 1).toLocaleString('hu-HU', { month: 'long', year: 'numeric' });
-        if (monthPicker) {
-          monthPicker.replaceChildren();
-          monthNames.forEach((name, index) => {
-            const button = document.createElement('button');
-            button.type = 'button'; button.className = 'month-button'; button.textContent = name;
-            button.classList.toggle('active', index === month);
-            button.setAttribute('aria-selected', String(index === month));
-            button.addEventListener('click', () => { month = index; renderCalendar(); });
-            monthPicker.appendChild(button);
-          });
-        }
+        if (previousMonth) previousMonth.disabled = year === minimumYear && month === minimumMonth;
         if (!calendar) return;
         calendar.replaceChildren();
         ['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'].forEach((day) => {
@@ -212,8 +204,8 @@
         renderEventDetails(visible, selectedDate);
         if (noEvents) noEvents.hidden = monthEvents.length > 0;
       };
-      yearPicker?.addEventListener('change', renderCalendar);
-      previousMonth?.addEventListener('click', () => { if (month === 0) { setYear(Number(yearPicker.value) - 1); month = 11; } else month -= 1; renderCalendar(); });
+      yearPicker?.addEventListener('change', () => { month = Number(yearPicker.value) === minimumYear ? minimumMonth : 0; renderCalendar(); });
+      previousMonth?.addEventListener('click', () => { if (yearPicker.value === String(minimumYear) && month === minimumMonth) return; if (month === 0) { setYear(Number(yearPicker.value) - 1); month = 11; } else month -= 1; renderCalendar(); });
       nextMonthButton?.addEventListener('click', () => { if (month === 11) { setYear(Number(yearPicker.value) + 1); month = 0; } else month += 1; renderCalendar(); });
       renderCalendar();
       if (noEvents) noEvents.hidden = visible.length > 0;
