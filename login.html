@@ -3,7 +3,7 @@
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="icon" type="image/png" href="ck_cimer_szines.png"><title>Bejelentkezés | Cantusok Köre</title><link rel="stylesheet" href="ck_fooldal.css"></head>
 <body>
   <header class="site-header"><div class="header-inner"><a class="brand" href="index.html"><img src="ck_cimer_szines.png" alt="Cantusok Köre logó"><span>Cantusok Köre</span></a><a class="button button-light" href="index.html">Főoldal</a></div></header>
-  <main class="page-shell"><div class="form-card"><p class="eyebrow">Üdv újra</p><h2>Bejelentkezés</h2><form id="loginForm"><input type="text" id="username" placeholder="Felhasználónév" autocomplete="username" required><input type="password" id="password" placeholder="Jelszó" autocomplete="current-password" required><button type="submit">Bejelentkezés</button></form><p>Még nincs fiókod? <a href="register.html">Regisztráció</a></p><p id="loginMessage" class="news-meta"></p></div></main><footer>© 2026 Cantusok Köre. Minden jog fenntartva.</footer>
+  <main class="page-shell"><div class="form-card"><p class="eyebrow">Üdv újra</p><h2>Bejelentkezés</h2><form id="loginForm"><input type="text" id="username" placeholder="Felhasználónév" autocomplete="username" required><input type="password" id="password" placeholder="Jelszó" autocomplete="current-password" required><button type="submit">Bejelentkezés</button></form><form id="passwordResetForm" hidden><p>A jelszavad vissza lett állítva. Állíts be egy új jelszót a folytatáshoz.</p><input type="password" id="newPassword" placeholder="Új jelszó" autocomplete="new-password" minlength="8" required><input type="password" id="newPasswordAgain" placeholder="Új jelszó ismét" autocomplete="new-password" minlength="8" required><button type="submit">Új jelszó mentése</button></form><p>Még nincs fiókod? <a href="register.html">Regisztráció</a></p><p id="loginMessage" class="news-meta"></p></div></main><footer>© 2026 Cantusok Köre. Minden jog fenntartva.</footer>
   <script>
     document.getElementById('loginForm').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -14,9 +14,34 @@
         const response = await fetch('/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.value, password: password.value }) });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+        if (data.requiresPasswordChange) {
+          event.currentTarget.hidden = true;
+          document.getElementById('passwordResetForm').hidden = false;
+          message.textContent = 'A folytatáshoz új jelszót kell beállítanod.';
+          return;
+        }
         window.location.href = 'index.html';
       } catch (error) { message.textContent = `Sikertelen bejelentkezés: ${error.message}`; }
       finally { button.disabled = false; button.textContent = 'Bejelentkezés'; }
+    });
+    document.getElementById('passwordResetForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = document.getElementById('loginMessage');
+      const password = document.getElementById('newPassword').value;
+      const passwordAgain = document.getElementById('newPasswordAgain').value;
+      if (password !== passwordAgain) { message.textContent = 'A két új jelszó nem egyezik.'; return; }
+      const button = event.currentTarget.querySelector('button');
+      button.disabled = true;
+      try {
+        const response = await fetch('/password-reset/complete', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+        window.location.href = 'index.html';
+      } catch (error) {
+        message.textContent = `Hiba: ${error.message}`;
+      } finally {
+        button.disabled = false;
+      }
     });
   </script>
 </body>

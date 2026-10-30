@@ -375,6 +375,14 @@
     authLinks.hidden = true;
     loggedInLinks.hidden = false;
     if (drawerUser) drawerUser.textContent = `Bejelentkezve: ${user.username}`;
+    if (user.isAllTimeAdmin && !document.getElementById('adminPageLink')) {
+      const adminPageLink = document.createElement('a');
+      adminPageLink.id = 'adminPageLink';
+      adminPageLink.className = 'button button-outline';
+      adminPageLink.href = '/admin';
+      adminPageLink.textContent = 'Admin felület';
+      loggedInLinks.insertBefore(adminPageLink, drawerLogout);
+    }
     if (drawerLogout) drawerLogout.addEventListener('click', async () => {
       const response = await fetch('/logout', { method: 'POST', credentials: 'include' });
       if (response.ok) window.location.reload();

@@ -10,6 +10,7 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -96,8 +97,6 @@ app.use(cors({
   credentials: true
 }));
 
-
-app.use(express.static(path.join(__dirname)));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -200,6 +199,20 @@ app.use(session({
   }
 }));
 
+const requireAllTimeAdminPage = async (req, res, next) => {
+  const username = req.session && req.session.user;
+  if (!username || !(await userHasRole(username, ['all-time admin']))) {
+    return res.status(username ? 403 : 401).send('Nincs jogosultsága ennek az oldalnak az eléréséhez.');
+  }
+  next();
+};
+
+app.get(['/admin', '/admin.html'], requireAllTimeAdminPage, (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+app.use(express.static(path.join(__dirname)));
+
 app.post('/login', async (req, res) => {
   
   try {
@@ -220,6 +233,11 @@ app.post('/login', async (req, res) => {
       const user = rows[0];
       const match = await bcrypt.compare(password, user.password);
       if (match) {
+        if (user.password_reset_required) {
+          delete req.session.user;
+          req.session.passwordResetUser = username;
+          return res.json({ success: true, requiresPasswordChange: true, username });
+        }
         req.session.user = username;
         if (!onlineUsers.includes(username)) onlineUsers.push(username);
         onlineUsersLastSeen[username] = Date.now();
@@ -233,6 +251,24 @@ app.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Error in /login handler:', err && err.stack ? err.stack : err);
     res.status(500).json({ message: 'Adatbázis hiba!', error: String(err && err.message ? err.message : err) });
+  }
+});
+
+app.post('/password-reset/complete', async (req, res) => {
+  const username = req.session && req.session.passwordResetUser;
+  const { password } = req.body || {};
+  if (!username) return res.status(401).json({ message: 'A jelszócsere munkamenete lejárt.' });
+  if (typeof password !== 'string' || password.length < 8) return res.status(400).json({ message: 'Az új jelszónak legalább 8 karakteresnek kell lennie.' });
+  try {
+    const hashed = await bcrypt.hash(password, 10);
+    const [, result] = await query('UPDATE registered_users SET password = ?, password_reset_required = FALSE WHERE username = ?', [hashed, username]);
+    if (!result || result.affectedRows === 0) return res.status(404).json({ message: 'A felhasználó nem található.' });
+    req.session.user = username;
+    delete req.session.passwordResetUser;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in /password-reset/complete:', err && err.stack ? err.stack : err);
+    res.status(500).json({ message: 'A jelszó mentése nem sikerült.' });
   }
 });
 
@@ -548,10 +584,12 @@ async function ensureSchema() {
         id BIGSERIAL PRIMARY KEY,
         username VARCHAR(100) NOT NULL UNIQUE,
         password VARCHAR(255) NOT NULL,
+        password_reset_required BOOLEAN NOT NULL DEFAULT FALSE,
         status VARCHAR(255),
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await query('ALTER TABLE registered_users ADD COLUMN IF NOT EXISTS password_reset_required BOOLEAN NOT NULL DEFAULT FALSE');
     await query(`
       CREATE TABLE IF NOT EXISTS roles (
         id BIGSERIAL PRIMARY KEY,
@@ -719,6 +757,24 @@ app.get('/admin/users', async (req, res) => {
   } catch (err) {
     console.error('Error in /admin/users', err && err.stack ? err.stack : err);
     res.status(500).json({ message: 'DB error', error: String(err && err.message ? err.message : err) });
+  }
+});
+
+app.post('/admin/users/:id/reset-password', async (req, res) => {
+  try {
+    const username = req.session && req.session.user;
+    if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
+    if (!(await userHasRole(username, ['all-time admin']))) return res.status(403).json({ message: 'Nincs jogosultsága' });
+    const userId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(userId) || userId < 1) return res.status(400).json({ message: 'Érvénytelen id' });
+    const temporaryPassword = crypto.randomBytes(9).toString('base64url');
+    const hashed = await bcrypt.hash(temporaryPassword, 10);
+    const [, result] = await query('UPDATE registered_users SET password = ?, password_reset_required = TRUE WHERE id = ?', [hashed, userId]);
+    if (!result || result.affectedRows === 0) return res.status(404).json({ message: 'A felhasználó nem található.' });
+    res.json({ success: true, temporaryPassword });
+  } catch (err) {
+    console.error('Error in POST /admin/users/:id/reset-password:', err && err.stack ? err.stack : err);
+    res.status(500).json({ message: 'A jelszó visszaállítása nem sikerült.' });
   }
 });
 

@@ -80,6 +80,16 @@
         if (r.ok) { showNotice('Szerep eltávolítva'); location.reload(); } else showNotice('Hiba', true);
       });
       opsCell.appendChild(roleInput); opsCell.appendChild(addBtn); opsCell.appendChild(remBtn);
+      const resetBtn = document.createElement('button'); resetBtn.textContent = 'Jelszó visszaállítása';
+      resetBtn.addEventListener('click', async () => {
+        if (!window.confirm(`Biztosan visszaállítod ${u.username} jelszavát?`)) return;
+        const r = await fetch('/admin/users/' + u.id + '/reset-password', { method: 'POST', credentials: 'include' });
+        const result = await r.json().catch(() => ({}));
+        if (!r.ok) { showNotice(result.message || 'Hiba a jelszó visszaállításakor', true); return; }
+        window.prompt(`Ideiglenes jelszó ${u.username} számára. Add át a felhasználónak; egyszer használható:`, result.temporaryPassword);
+        showNotice('Jelszó visszaállítva. A felhasználónak új jelszót kell beállítania.');
+      });
+      opsCell.appendChild(resetBtn);
 
       tbody.appendChild(tr);
     });
