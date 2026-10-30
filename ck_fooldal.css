@@ -15,8 +15,8 @@
   --paper: #241a1a;
   --background: #120e0e;
   --wine-soft: #3a2020;
-  --wine: #ff8f8f;
-  --wine-dark: #ffc0c0;
+  --wine: #ffd1d1;
+  --wine-dark: #ffffff;
   --surface-border: #4a3636;
   --shadow: 0 18px 50px rgba(0, 0, 0, .35);
 }
@@ -32,7 +32,8 @@ body {
   line-height: 1.6;
 }
 body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; background: url("/CK%20c%C3%ADmer%20fekete-feh%C3%A9r.png") center/ min(70vw, 700px) no-repeat; opacity: .035; filter: grayscale(1); }
-[data-theme="dark"] body::before { opacity: .08; filter: invert(1) grayscale(1); }
+[data-theme="dark"] body::before { opacity: .035; filter: invert(1) grayscale(1); }
+body > * { position: relative; z-index: 1; }
 a { color: var(--wine); }
 button, input, select, textarea { font: inherit; }
 button, .button { cursor: pointer; }
@@ -89,6 +90,9 @@ button, .button { cursor: pointer; }
 .bug-report-toggle { border-color: rgba(255,220,220,.7); }
 .floating-theme-toggle { color: #211b1b; border-color: #211b1b; background: #fff; }
 [data-theme="dark"] .floating-theme-toggle { color: #fff; border-color: #fff; background: #211b1b; }
+[data-theme="dark"] .button { background: #fff; border-color: #fff; color: #211b1b; }
+[data-theme="dark"] .button:hover { background: #ffd1d1; border-color: #ffd1d1; }
+[data-theme="dark"] .button-outline { background: transparent; color: #ffd1d1; border-color: #ffd1d1; }
 .floating-theme-toggle, .floating-bug-toggle { position: fixed; bottom: 24px; z-index: 15; box-shadow: var(--shadow); }
 .floating-theme-toggle { left: 24px; }
 .floating-bug-toggle { right: 24px; }
@@ -138,6 +142,7 @@ body.can-create-post .floating-bug-toggle { bottom: 94px; }
 .news-post { padding: 18px 0; border-bottom: 1px solid var(--surface-border); }
 .news-post:last-child { border-bottom: 0; }
 .next-song-card { margin: 0 0 28px; background: linear-gradient(120deg, #fff, var(--wine-soft)); }
+[data-theme="dark"] .next-song-card { background: linear-gradient(120deg, #241a1a, #3a2020); }
 .next-song-card h2 { margin: 0; color: var(--wine); }
 .next-song-card p:not(.eyebrow) { margin: 6px 0 18px; font-size: 1.1rem; }
 .calendar-toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
@@ -171,6 +176,7 @@ body.can-create-post .floating-bug-toggle { bottom: 94px; }
 .photo-card:nth-last-child(2):nth-child(3n + 1) { grid-column: 2; }
 .roulette-card { width: min(760px, 100%); margin: 0 auto; text-align: center; }
 .roulette-stage { padding: clamp(24px, 6vw, 58px) 18px; border-radius: 20px; background: radial-gradient(circle at 50% 0, #fff, var(--wine-soft)); }
+[data-theme="dark"] .roulette-stage { background: radial-gradient(circle at 50% 0, #3a2a2a, #241a1a); }
 .roulette-result, .roulette-song { color: var(--wine); font-size: clamp(1.7rem, 5vw, 3rem); font-weight: 800; line-height: 1.15; min-height: 1.3em; }
 .roulette-song { margin-bottom: 24px; font-size: clamp(1.4rem, 4vw, 2.3rem); }
 .roulette-result.spinning, .roulette-song.spinning { animation: roulette-pulse .15s linear infinite alternate; }
@@ -196,6 +202,14 @@ body.can-create-post .floating-bug-toggle { bottom: 94px; }
 .feature-card { padding: 24px; border-radius: 18px; background: var(--wine-soft); transition: transform .2s, box-shadow .2s; }
 .feature-card:hover { transform: translateY(-5px); box-shadow: var(--shadow); }
 .feature-card h3 { color: var(--wine); margin-top: 0; }
+[data-theme="dark"] .section-heading h2,
+[data-theme="dark"] .page-heading h1,
+[data-theme="dark"] .next-song-card h2,
+[data-theme="dark"] .event-item h3,
+[data-theme="dark"] .member-content h3,
+[data-theme="dark"] .feature-card h3,
+[data-theme="dark"] .roulette-result,
+[data-theme="dark"] .roulette-song { color: #fff; }
 
 .drawer-backdrop { display: none; position: fixed; inset: 0; z-index: 29; background: rgba(20,0,0,.45); }
 .account-drawer {
