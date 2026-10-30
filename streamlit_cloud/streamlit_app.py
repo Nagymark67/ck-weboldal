@@ -216,7 +216,7 @@ def render_contents():
         """
         <div class="ck-toc">
         <h3>Az Oldal Tartalma</h3>
-        <a href="#rolunk">Rólunk</a><br>
+        <a href="
         <a href="#all-members">Tagok listája</a><br>
         &nbsp;&nbsp;<a href="#alapito-tagok">Alapító tagok</a><br>
         &nbsp;&nbsp;<a href="#rendes-tagok">Rendes tagok</a><br>
@@ -234,7 +234,7 @@ def render_members():
     sections = member_sections()
     st.subheader("Tagok listája")
     for heading, names in sections.items():
-        st.markdown(f"#### {heading}")
+        st.markdown(f"
         if names:
             st.markdown("\n".join(f"- {name}" for name in names))
 

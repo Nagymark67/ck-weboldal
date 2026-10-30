@@ -1,5 +1,5 @@
--- db_init.sql
--- Run this file with the mysql client to create the `users` database and `registered_users` table.
+
+
 
 CREATE DATABASE IF NOT EXISTS `users` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -15,10 +15,10 @@ CREATE TABLE IF NOT EXISTS `registered_users` (
   UNIQUE KEY `ux_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Optional: insert a test user (password in plain text for test only)
--- INSERT INTO registered_users (username, password, status) VALUES ('test', 'testpass', 'teszt');
 
--- Posts and roles tables for simple posting system
+
+
+
 CREATE TABLE IF NOT EXISTS `roles` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `role_name` VARCHAR(100) NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS `posts` (
   INDEX (`author_username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Optional sample roles (run manually if you want):
--- INSERT INTO roles (role_name) VALUES ('cantus_praeses'), ('jegyzo');
--- To assign a role to a user (replace IDs accordingly):
--- INSERT INTO user_roles (user_id, role_id) VALUES ( (SELECT id FROM registered_users WHERE username='someuser'), (SELECT id FROM roles WHERE role_name='cantus_praeses') );
+
+
+
+

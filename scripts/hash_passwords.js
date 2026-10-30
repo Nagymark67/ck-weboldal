@@ -1,6 +1,6 @@
-// scripts/hash_passwords.js
-// Usage: node scripts/hash_passwords.js
-// This script will hash all plaintext passwords in registered_users that don't look like bcrypt hashes.
+
+
+
 
 const { Client } = require('pg');
 const bcrypt = require('bcryptjs');
@@ -13,7 +13,7 @@ const bcrypt = require('bcryptjs');
     console.log(`Found ${rows.length} users`);
     for (const r of rows) {
       const pw = r.password || '';
-      // bcrypt hashes start with $2a$ or $2b$ or $2y$
+      
       if (!pw.startsWith('$2a$') && !pw.startsWith('$2b$') && !pw.startsWith('$2y$')) {
         console.log(`Hashing password for user ${r.username} (id ${r.id})`);
         const hash = await bcrypt.hash(pw, 10);

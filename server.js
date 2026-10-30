@@ -11,7 +11,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 
-// Ensure uploads dir exists
+
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
@@ -25,7 +25,7 @@ const storage = multer.diskStorage({
     cb(null, unique + '-' + safe);
   }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit per file
+const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); 
 const galleryUpload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -33,16 +33,16 @@ const galleryUpload = multer({
 });
 
 
-/*
-const users = [
-  { username: 'cantus1', password: 'jelszo1' },
-  { username: 'cantus2', password: 'jelszo2' },
-  { username: 'cantus3', password: 'jelszo3' }
-];
-*/
 
-// Supabase, Neon, Render PostgreSQL, and other hosted providers expose this URL.
-// Keep DATABASE_URL in environment variables; never commit database credentials.
+
+
+
+
+
+
+
+
+
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is required. Set it to your PostgreSQL connection string.');
@@ -69,7 +69,7 @@ async function postgresQuery(sql, values = []) {
 
 const query = postgresQuery;
 
-// Names allowed to register with 'Alapító' status (exact match)
+
 const allowedFounders = [
   'Simon Gábor',
   'Barak Antal',
@@ -78,41 +78,41 @@ const allowedFounders = [
   'Czakó Gábor'
 ];
 
-// CORS configuration: can be overridden with CORS_ORIGINS (comma-separated) or allow all with CORS_ALLOW_ALL=1
+
 const defaultOrigins = ['http://localhost', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5500'];
 const normalizeOrigin = (origin) => origin.trim().replace(/\/+$/, '');
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(normalizeOrigin).filter(Boolean)
   : defaultOrigins;
-// Allow all origins when developing locally (NODE_ENV != 'production') or when explicitly set.
+
 const allowAll = process.env.CORS_ALLOW_ALL === '1' || process.env.NODE_ENV !== 'production';
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // allow non-browser or same-origin requests
+    if (!origin) return callback(null, true); 
     if (allowAll || allowedOrigins.includes(normalizeOrigin(origin))) return callback(null, true);
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));
 
-// Serve static files (index.html, css, images) from project root
+
 app.use(express.static(path.join(__dirname)));
-// Serve uploaded files
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Simple request logger for debugging
+
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
 
-// Explicit root route to serve index.html (fallback if static middleware doesn't match)
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Serve login and register pages at clean routes
+
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
@@ -121,7 +121,7 @@ app.get('/register', (req, res) => {
   res.sendFile(path.join(__dirname, 'register.html'));
 });
 
-  // Capture raw request body for debugging (do not keep in production logs)
+  
   app.use(express.json({
     verify: (req, res, buf, encoding) => {
       try { req.rawBody = buf && buf.toString(encoding || 'utf8'); } catch (e) { req.rawBody = undefined; }
@@ -129,7 +129,7 @@ app.get('/register', (req, res) => {
   }));
   app.use(express.urlencoded({ extended: true, verify: (req, res, buf, encoding) => { try { req.rawBody = buf && buf.toString(encoding || 'utf8'); } catch(e){}} }));
 
-// Handle JSON parse errors from express.json() — return JSON instead of Express's default HTML error page
+
 app.use((err, req, res, next) => {
   if (err && err.type === 'entity.parse.failed') {
     console.error('JSON body parse error:', err && err.stack ? err.stack : err);
@@ -138,22 +138,22 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// Registration endpoint
+
 app.post('/register', async (req, res) => {
   const { username, password, status } = req.body;
   if (!username || !password || !status) return res.status(400).json({ message: 'Hiányzó adatok!' });
 
   try {
-    // Validate special statuses
-    // 1) 'Alapító' may only be chosen by a specific list of usernames
+    
+    
     if (status === 'Alapító') {
       if (!allowedFounders.includes(username)) {
         return res.status(403).json({ message: 'Csak az Alapítóként megadott személyek választhatják ezt a státuszt.' });
       }
     }
 
-    // 2) Prevent more than one person from registering as the official officers
-    // Only allow a single 'Cantus Praeses' and a single 'Jegyző' in registered_users.status
+    
+    
     const reservedStatuses = ['Cantus Praeses', 'Jegyző'];
     if (reservedStatuses.includes(status)) {
       const [taken] = await query('SELECT id FROM registered_users WHERE status = ? LIMIT 1', [status]);
@@ -161,12 +161,12 @@ app.post('/register', async (req, res) => {
         return res.status(403).json({ message: `${status} pozíciót már betöltik.` });
       }
     }
-    // Check if user exists
+    
     const [rows] = await query('SELECT id FROM registered_users WHERE username = ?', [username]);
     if (rows.length > 0) {
       return res.status(409).json({ message: 'A felhasználónév már foglalt!' });
     }
-    // Hash the password before saving
+    
     const salt = await bcrypt.genSalt(10);
     const hashed = await bcrypt.hash(password, salt);
     await query('INSERT INTO registered_users (username, password, status) VALUES (?, ?, ?)', [username, hashed, status]);
@@ -184,7 +184,7 @@ app.post('/register', async (req, res) => {
 });
 
 let onlineUsers = [];
-// In-memory last-seen timestamps for presence tracking: { username: epoch_ms }
+
 const onlineUsersLastSeen = {};
 
 
@@ -195,28 +195,28 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax' // Allow credentials in cross-origin requests from ngrok
+    maxAge: 24 * 60 * 60 * 1000, 
+    sameSite: 'lax' 
   }
 }));
 
 app.post('/login', async (req, res) => {
-  // Debug: log incoming headers/body briefly to capture malformed requests that could cause HTML errors
+  
   try {
     console.log('/login incoming headers:', JSON.stringify(req.headers));
-    // limit body logging to avoid leaking secrets in logs in production
+    
     console.log('/login incoming body keys:', Object.keys(req.body || {}));
     if (req.rawBody) console.log('/login rawBody preview:', req.rawBody.slice(0,200));
-  } catch (e) { /* ignore logging errors */ }
+  } catch (e) {  }
   const { username, password } = req.body;
   try {
-    // Select by username only; password comparison is done with bcrypt.compare
+    
     const [rows] = await query(
       'SELECT * FROM registered_users WHERE username = ?',
       [username]
     );
     if (rows.length > 0) {
-      // Password stored as hash; compare
+      
       const user = rows[0];
       const match = await bcrypt.compare(password, user.password);
       if (match) {
@@ -238,7 +238,7 @@ app.post('/login', async (req, res) => {
 
 app.get('/online-users', async (req, res) => {
   try {
-    // Use last-seen timestamps to determine online users (timeout 45s)
+    
     const now = Date.now();
     const timeout = 45 * 1000;
     const active = Object.entries(onlineUsersLastSeen).filter(([u, t]) => (now - t) <= timeout).map(([u]) => u);
@@ -248,14 +248,14 @@ app.get('/online-users', async (req, res) => {
       `SELECT username, status FROM registered_users WHERE username IN (${placeholders})`,
       active
     );
-    res.json({ users: rows }); // rows: [{username, status}, ...]
+    res.json({ users: rows }); 
   } catch (err) {
     console.error(err);
     res.status(500).json({ users: [] });
   }
 });
 
-// Presence ping endpoint — clients should POST regularly to keep presence alive
+
 app.post('/online-ping', (req, res) => {
   try {
     const username = req.session && req.session.user;
@@ -269,14 +269,14 @@ app.post('/online-ping', (req, res) => {
   }
 });
 
-// Allow clients to mark themselves as gone (remove from presence) without destroying session
+
 app.post('/online-leave', (req, res) => {
   try {
     const username = req.session && req.session.user;
     if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
     onlineUsers = onlineUsers.filter(u => u !== username);
     try { delete onlineUsersLastSeen[username]; } catch (e) {}
-    // Do not destroy the session here; just update presence state
+    
     res.json({ success: true });
   } catch (err) {
     console.error('Error in /online-leave', err);
@@ -286,19 +286,19 @@ app.post('/online-leave', (req, res) => {
 
 app.get('/me', (req, res) => {
     if (req.session && req.session.user) {
-        // Fetch roles for the user to assist in client-side UI decisions
+        
         (async () => {
             try {
-        // Get user's roles and status in one shot
+        
         const [rows] = await query(
           `SELECT u.status AS user_status, r.role_name FROM registered_users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id WHERE u.username = ?`,
           [req.session.user]
         );
-    // rows may contain multiple rows (one per role) or a single row with role_name null
+    
     const isAllTimeAdmin = rows.some(r => r.role_name === 'all-time admin');
-    // collect explicit roles (exclude all-time admin from client view)
+    
     const explicitRoles = Array.from(new Set(rows.map(r => r.role_name).filter(x => x && x !== 'all-time admin')));
-    // derive roles from user_status to keep backward compatibility with earlier registrations where status implied role
+    
     const status = rows.length > 0 ? (rows[0].user_status || null) : null;
     const derivedRoles = [];
     if (status) {
@@ -319,12 +319,12 @@ app.get('/me', (req, res) => {
     }
 });
 
-// Helper: check if a username has any of the required roles
+
 async function userHasRole(username, requiredRoles = []) {
   if (!username) return false;
   if (!requiredRoles || requiredRoles.length === 0) return false;
   try {
-    // First check if user is all-time admin; if so, grant access
+    
     const [isAdminRows] = await query(
       `SELECT 1 FROM roles r JOIN user_roles ur ON ur.role_id = r.id JOIN registered_users u ON u.id = ur.user_id WHERE u.username = ? AND r.role_name = 'all-time admin' LIMIT 1`,
       [username]
@@ -342,7 +342,7 @@ async function userHasRole(username, requiredRoles = []) {
   }
 }
 
-// Simple sanitizer: strip script tags to avoid obvious XSS (keep it minimal)
+
 function sanitizeContent(input) {
   if (!input) return '';
   return input.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
@@ -352,16 +352,16 @@ function sanitizeContent(input) {
               .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '');
 }
 
-// List recent posts (latest first)
+
 app.get('/posts', async (req, res) => {
   try {
-    // Visibility filtering: if not logged in, only show 'mindenki'; if logged in, show all (can be refined later)
+
     let visibilityClause = "visibility IN ('mindenki')";
     if (req.session && req.session.user) {
       visibilityClause = "visibility IN ('mindenki','tagok_es_tanitvanyok','csak_tagok')";
     }
     const [rows] = await query(`SELECT id, author_username, content, visibility, attachments, created_at FROM posts WHERE ${visibilityClause} ORDER BY created_at DESC LIMIT 50`);
-    // attachments stored as JSON string; parse before returning
+
     const parsed = rows.map(r => ({
       ...r,
       attachments: Array.isArray(r.attachments)
@@ -376,8 +376,8 @@ app.get('/posts', async (req, res) => {
   }
 });
 
-// Create a new post — only users with roles cantus_praeses or jegyzo can post
-// Accept multipart/form-data with optional files (attachments) and visibility field
+
+
 app.post('/posts', upload.array('attachments', 5), async (req, res) => {
   const username = req.session && req.session.user;
   if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
@@ -408,7 +408,7 @@ app.post('/posts', upload.array('attachments', 5), async (req, res) => {
     const filePaths = [];
     if (req.files && req.files.length > 0) {
       for (const f of req.files) {
-        // store relative URL path for client
+
         filePaths.push('/uploads/' + path.basename(f.path));
       }
     }
@@ -442,7 +442,7 @@ app.post('/posts/:id/vote', async (req, res) => {
   }
 });
 
-// Delete a post (only allowed for authors or users with roles)
+
 app.delete('/posts/:id', async (req, res) => {
   const username = req.session && req.session.user;
   if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
@@ -505,29 +505,29 @@ app.post('/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Delete the currently logged-in user's account.
-// This removes the user_roles entries and the registered_users row so the status becomes available.
+
+
 app.post('/delete-account', async (req, res) => {
   const username = req.session && req.session.user;
   if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
   try {
-    // Find user id
+    
     const [urows] = await query('SELECT id FROM registered_users WHERE username = ? LIMIT 1', [username]);
     if (urows.length === 0) {
-      // If user not found, just destroy session and respond success
+      
       onlineUsers = onlineUsers.filter(u => u !== username);
       req.session.destroy();
       return res.json({ success: true, message: 'Felhasználó nem található, kiléptetve.' });
     }
     const userId = urows[0].id;
 
-    // Remove role assignments for this user
+    
     await query('DELETE FROM user_roles WHERE user_id = ?', [userId]);
 
-    // Remove the user record (this frees the status value for future registrations)
+    
     await query('DELETE FROM registered_users WHERE id = ?', [userId]);
 
-    // Remove from online list and destroy session
+    
   onlineUsers = onlineUsers.filter(u => u !== username);
   try { delete onlineUsersLastSeen[username]; } catch(e){}
     req.session.destroy();
@@ -539,8 +539,8 @@ app.post('/delete-account', async (req, res) => {
   }
 });
 
-// Start server and log the actual address info for debugging (IPv4 vs IPv6)
-// Ensure minimal schema (roles, user_roles, posts) exists before starting
+
+
 async function ensureSchema() {
   try {
     await query(`
@@ -595,8 +595,8 @@ async function ensureSchema() {
   }
 }
 
-// Start server after ensuring DB schema
-// Create default roles and a hidden all-time admin user if missing
+
+
 async function ensureRolesAndAdminUser() {
   try {
     const rolesToEnsure = ['cantus_praeses', 'jegyzo', 'all-time admin'];
@@ -604,11 +604,11 @@ async function ensureRolesAndAdminUser() {
       await query('INSERT INTO roles (role_name) VALUES (?) ON CONFLICT (role_name) DO NOTHING', [r]);
     }
 
-    // Ensure the special all-time admin user exists and has the hidden role
+    
     const adminUsername = 'Nagy Márk a. Burschazam';
-    const adminPlainPassword = 'FErrari83493365.'; // provided by user — will be hashed
+    const adminPlainPassword = 'FErrari83493365.'; 
 
-    // Check if user exists
+    
     const [urows] = await query('SELECT id FROM registered_users WHERE username = ?', [adminUsername]);
     let userId;
     if (urows.length === 0) {
@@ -621,7 +621,7 @@ async function ensureRolesAndAdminUser() {
       userId = urows[0].id;
     }
 
-    // Assign the all-time admin role
+    
     const [rrows] = await query('SELECT id FROM roles WHERE role_name = ?', ['all-time admin']);
     if (rrows.length > 0) {
       const roleId = rrows[0].id;
@@ -652,8 +652,8 @@ async function ensureRolesAndAdminUser() {
   }
 })();
 
-// Temporary debug endpoint: list tables in the configured database
-// Remove this in production; it's intended to help local debugging.
+
+
 app.get('/debug/db-tables', async (req, res) => {
   try {
     const [rows] = await query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
@@ -664,11 +664,11 @@ app.get('/debug/db-tables', async (req, res) => {
   }
 });
 
-// Return which reserved officer statuses are currently taken so the client can disable them in the UI
+
 app.get('/reserved-statuses', async (req, res) => {
   try {
     const reserved = ['Cantus Praeses', 'Jegyző'];
-    // Trim stored status values before comparing to be robust against whitespace differences
+    
     const [rows] = await query(
       "SELECT DISTINCT TRIM(status) AS status FROM registered_users WHERE TRIM(status) IN (?, ?)",
       reserved
@@ -685,14 +685,14 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err && err.stack ? err.stack : err);
 });
 
-// Express error handler — catch any thrown errors that weren't handled and return JSON
+
 app.use((err, req, res, next) => {
   console.error('Unhandled error middleware:', err && err.stack ? err.stack : err);
   if (res.headersSent) return next(err);
   res.status(500).json({ message: 'Internal server error', error: String(err && err.message ? err.message : err) });
 });
 
-// Admin API: list users (id, username, status, roles)
+
 app.get('/admin/users', async (req, res) => {
   try {
     const username = req.session && req.session.user;
@@ -722,7 +722,7 @@ app.get('/admin/users', async (req, res) => {
   }
 });
 
-// Admin: update a user's status
+
 app.post('/admin/users/:id/status', async (req, res) => {
   try {
     const username = req.session && req.session.user;
@@ -748,7 +748,7 @@ app.post('/admin/users/:id/status', async (req, res) => {
   }
 });
 
-// Admin: add/remove a role for a user
+
 app.post('/admin/users/:id/roles', async (req, res) => {
   try {
     const username = req.session && req.session.user;
@@ -764,10 +764,10 @@ app.post('/admin/users/:id/roles', async (req, res) => {
       return res.status(403).json({ message: 'Nincs jogosultsága' });
     }
     const userId = parseInt(req.params.id, 10);
-    const { role, action } = req.body; // action: 'add' or 'remove'
+    const { role, action } = req.body; 
     if (!userId || !role || !action) return res.status(400).json({ message: 'Hiányzó adatok' });
 
-    // Ensure role exists
+    
     const [rrows] = await query('SELECT id FROM roles WHERE role_name = ?', [role]);
     let roleId;
     if (rrows.length === 0) {
@@ -788,7 +788,7 @@ app.post('/admin/users/:id/roles', async (req, res) => {
   }
 });
 
-// Temporary debug endpoint to inspect session and admin-check quickly
+
 app.get('/admin/debug', async (req, res) => {
   try {
     const sessionUser = req.session && req.session.user;
