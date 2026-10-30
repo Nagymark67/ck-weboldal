@@ -294,7 +294,14 @@ def render_register(session):
 def main():
     configure_page()
     session = get_api_session()
-    user = current_user(session)
+    with st.sidebar:
+        st.markdown("## Cantusok Köre")
+        view = st.radio(
+            "Navigáció",
+            ["Főoldal", "Bejelentkezés", "Regisztráció"],
+            key="active_view",
+        )
+    user = current_user(session) if view in {"Főoldal", "Bejelentkezés"} else None
     if user is None and st.session_state.get("was_authenticated"):
         reset_api_session()
         session = get_api_session()
@@ -304,13 +311,8 @@ def main():
 
     render_header(user)
     with st.sidebar:
-        st.markdown("## Cantusok Köre")
-        view = st.radio(
-            "Navigáció",
-            ["Főoldal", "Bejelentkezés", "Regisztráció"],
-            key="active_view",
-        )
-        render_online_users(session)
+        if view == "Főoldal":
+            render_online_users(session)
         if user and st.button("Kijelentkezés"):
             try:
                 response = api_request(session, "POST", "/logout")
