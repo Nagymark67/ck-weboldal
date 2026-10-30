@@ -47,6 +47,7 @@
   const songTarget = document.getElementById('next-daltanitas');
   const eventList = document.getElementById('eventList');
   const search = document.getElementById('eventSearch');
+  const calendar = document.getElementById('calendar');
   const songName = 'Daltanítás';
   const songLocation = 'Liget Söröző';
   const canManageContent = (user) => user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role)));
@@ -99,11 +100,10 @@
       date.setDate(date.getDate() + 7);
       if (date.getMonth() === 11 && date.getDate() === 25) date.setDate(date.getDate() + 7);
     }
-    const renderEvents = () => {
-      const query = (search?.value || '').trim().toLocaleLowerCase('hu-HU');
+    const renderEventDetails = (visible, selectedDate) => {
       eventList.replaceChildren();
-      const visible = events.filter((event) => `${event.title} ${event.location} ${formatDate(event.date)}`.toLocaleLowerCase('hu-HU').includes(query));
-      visible.forEach((event) => {
+      const selectedEvents = visible.filter((event) => event.date.getFullYear() === selectedDate.getFullYear() && event.date.getMonth() === selectedDate.getMonth() && event.date.getDate() === selectedDate.getDate());
+      selectedEvents.forEach((event) => {
         const item = document.createElement('article');
         item.className = 'event-item';
         const content = document.createElement('div');
@@ -123,14 +123,99 @@
         actions.className = 'event-actions';
         const add = document.createElement('a');
         add.className = 'button button-outline'; add.href = googleCalendarUrl(event.date, event); add.target = '_blank'; add.rel = 'noopener'; add.textContent = 'Google Naptár';
-        actions.appendChild(add); item.appendChild(actions); eventList.appendChild(item);
+        actions.appendChild(add);
         if (event.link) {
           const registration = document.createElement('a');
           registration.className = 'button'; registration.href = event.link; registration.target = '_blank'; registration.rel = 'noopener'; registration.textContent = 'Jelentkezési űrlap';
           actions.appendChild(registration);
         }
+        item.appendChild(actions);
+        eventList.appendChild(item);
       });
+      eventList.hidden = selectedEvents.length === 0;
+    };
+    const renderEvents = () => {
+      const query = (search?.value || '').trim().toLocaleLowerCase('hu-HU');
+      const visible = events.filter((event) => `${event.title} ${event.location} ${formatDate(event.date)}`.toLocaleLowerCase('hu-HU').includes(query));
+      const yearPicker = document.getElementById('eventYear');
+      const monthPicker = document.getElementById('monthPicker');
+      const calendarTitle = document.getElementById('calendarTitle');
+      const previousMonth = document.getElementById('previousMonth');
+      const nextMonthButton = document.getElementById('nextMonth');
       const noEvents = document.getElementById('noEvents');
+      const monthNames = Array.from({ length: 12 }, (_, month) => new Date(2020, month, 1).toLocaleString('hu-HU', { month: 'long' }));
+      const currentYear = new Date().getFullYear();
+      const years = [...new Set([currentYear - 1, currentYear, currentYear + 1, currentYear + 2, ...events.map((event) => event.date.getFullYear())])].sort((a, b) => a - b);
+      if (yearPicker && !yearPicker.options.length) {
+        years.forEach((year) => yearPicker.add(new Option(String(year), String(year))));
+        yearPicker.value = String(new Date().getFullYear());
+      }
+      let month = Number(calendar?.dataset.month || new Date().getMonth());
+      const setYear = (year) => {
+        if (!yearPicker) return;
+        if (!Array.from(yearPicker.options).some((option) => option.value === String(year))) yearPicker.add(new Option(String(year), String(year)));
+        yearPicker.value = String(year);
+      };
+      const renderCalendar = () => {
+        const year = Number(yearPicker?.value || selectedMonth);
+        if (calendar) calendar.dataset.month = String(month);
+        if (calendarTitle) calendarTitle.textContent = new Date(year, month, 1).toLocaleString('hu-HU', { month: 'long', year: 'numeric' });
+        if (monthPicker) {
+          monthPicker.replaceChildren();
+          monthNames.forEach((name, index) => {
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'month-button'; button.textContent = name;
+            button.classList.toggle('active', index === month);
+            button.setAttribute('aria-selected', String(index === month));
+            button.addEventListener('click', () => { month = index; renderCalendar(); });
+            monthPicker.appendChild(button);
+          });
+        }
+        if (!calendar) return;
+        calendar.replaceChildren();
+        ['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'].forEach((day) => {
+          const heading = document.createElement('span');
+          heading.className = 'calendar-weekday'; heading.textContent = day; heading.setAttribute('role', 'columnheader');
+          calendar.appendChild(heading);
+        });
+        const firstDay = new Date(year, month, 1);
+        const offset = (firstDay.getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const today = new Date();
+        let selectedDate = new Date(year, month, Math.min(today.getDate(), daysInMonth));
+        for (let index = 0; index < offset + daysInMonth; index += 1) {
+          if (index < offset) { calendar.appendChild(document.createElement('span')).className = 'calendar-empty'; continue; }
+          const day = index - offset + 1;
+          const cellDate = new Date(year, month, day);
+          const cellEvents = visible.filter((event) => event.date.getFullYear() === year && event.date.getMonth() === month && event.date.getDate() === day);
+          const cell = document.createElement('button');
+          cell.type = 'button'; cell.className = 'calendar-day'; cell.setAttribute('role', 'gridcell');
+          if (today.toDateString() === cellDate.toDateString()) cell.classList.add('today');
+          cell.innerHTML = `<span class="calendar-day-number">${day}</span>`;
+          cellEvents.slice(0, 3).forEach((event) => {
+            const label = document.createElement('span');
+            label.className = 'calendar-event'; label.textContent = event.title;
+            cell.appendChild(label);
+          });
+          if (cellEvents.length > 3) {
+            const more = document.createElement('span');
+            more.className = 'calendar-event-more'; more.textContent = `+${cellEvents.length - 3} további`;
+            cell.appendChild(more);
+          }
+          cell.addEventListener('click', () => { selectedDate = cellDate; calendar.querySelectorAll('.calendar-day.selected').forEach((item) => item.classList.remove('selected')); cell.classList.add('selected'); renderEventDetails(visible, selectedDate); });
+          calendar.appendChild(cell);
+        }
+        const monthEvents = visible.filter((event) => event.date.getFullYear() === year && event.date.getMonth() === month);
+        if (!monthEvents.some((event) => event.date.toDateString() === selectedDate.toDateString())) selectedDate = monthEvents[0]?.date || selectedDate;
+        const selectedCell = [...calendar.querySelectorAll('.calendar-day')].find((cell) => cell.querySelector('.calendar-day-number')?.textContent === String(selectedDate.getDate()));
+        selectedCell?.classList.add('selected');
+        renderEventDetails(visible, selectedDate);
+        if (noEvents) noEvents.hidden = monthEvents.length > 0;
+      };
+      yearPicker?.addEventListener('change', renderCalendar);
+      previousMonth?.addEventListener('click', () => { if (month === 0) { setYear(Number(yearPicker.value) - 1); month = 11; } else month -= 1; renderCalendar(); });
+      nextMonthButton?.addEventListener('click', () => { if (month === 11) { setYear(Number(yearPicker.value) + 1); month = 0; } else month += 1; renderCalendar(); });
+      renderCalendar();
       if (noEvents) noEvents.hidden = visible.length > 0;
     };
     search?.addEventListener('input', renderEvents);

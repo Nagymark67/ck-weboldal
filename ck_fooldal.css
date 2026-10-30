@@ -148,10 +148,30 @@ body.can-create-post .floating-bug-toggle { bottom: 94px; }
 .next-song-card p:not(.eyebrow) { margin: 6px 0 18px; font-size: 1.1rem; }
 .calendar-toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
 .calendar-toolbar input { flex: 1 1 260px; border: 1px solid #d9cece; border-radius: 999px; padding: 12px 16px; }
+.year-picker { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 700; }
+.year-picker select { border: 1px solid #d9cece; border-radius: 999px; padding: 11px 14px; background: var(--paper); color: var(--ink); }
 [data-theme="dark"] .calendar-toolbar input,
 [data-theme="dark"] .form-card input,
 [data-theme="dark"] .form-card select,
 [data-theme="dark"] .form-card textarea { border-color: var(--surface-border); background: var(--paper); color: var(--ink); }
+.month-picker { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 20px; }
+.month-button { border: 1px solid var(--surface-border); border-radius: 999px; padding: 9px 8px; background: var(--paper); color: var(--muted); cursor: pointer; text-transform: capitalize; }
+.month-button:hover, .month-button.active { border-color: var(--wine); background: var(--wine-soft); color: var(--wine); }
+.calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 14px; }
+.calendar-heading h2 { margin: 0; color: var(--wine); font-size: 1.5rem; text-transform: capitalize; }
+.calendar-nav { width: 40px; height: 40px; border: 1px solid var(--surface-border); border-radius: 50%; background: var(--paper); color: var(--wine); font-size: 1.7rem; line-height: 1; cursor: pointer; }
+.calendar-nav:hover { background: var(--wine-soft); }
+.calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.calendar-weekday { padding: 6px; color: var(--muted); font-size: .8rem; font-weight: 800; text-align: center; text-transform: uppercase; }
+.calendar-empty { min-height: 108px; }
+.calendar-day { min-height: 108px; overflow: hidden; padding: 9px; border: 1px solid var(--surface-border); border-radius: 12px; background: var(--paper); color: var(--ink); text-align: left; cursor: pointer; }
+.calendar-day:hover, .calendar-day.selected { border-color: var(--wine); box-shadow: inset 0 0 0 1px var(--wine); }
+.calendar-day.today .calendar-day-number { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--wine); color: #fff; }
+.calendar-day-number { display: block; margin-bottom: 5px; font-weight: 800; }
+.calendar-event, .calendar-event-more { display: block; overflow: hidden; margin-top: 4px; padding: 3px 5px; border-radius: 5px; background: var(--wine-soft); color: var(--wine); font-size: .75rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-event-more { background: transparent; font-weight: 700; }
+.event-list { margin-top: 22px; }
+.event-list[hidden] { display: none; }
 .event-list { display: grid; gap: 14px; }
 .event-item { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 20px; border: 1px solid var(--surface-border); border-radius: 16px; background: var(--paper); }
 .event-item h3 { margin: 0 0 4px; color: var(--wine); }
@@ -298,6 +318,14 @@ footer { padding: 28px 16px; color: var(--muted); text-align: center; }
   .roulette-song { font-size: clamp(1.25rem, 7vw, 2rem); overflow-wrap: anywhere; }
   .roulette-actions .button { width: 100%; }
   .calendar-toolbar input, .calendar-toolbar .button { width: 100%; }
+  .year-picker { width: 100%; justify-content: space-between; }
+  .year-picker select { flex: 1; }
+  .month-picker { grid-template-columns: repeat(3, 1fr); }
+  .calendar { gap: 3px; }
+  .calendar-empty, .calendar-day { min-height: 76px; }
+  .calendar-day { padding: 5px; border-radius: 8px; }
+  .calendar-weekday { padding: 3px 0; font-size: .65rem; }
+  .calendar-event, .calendar-event-more { font-size: .62rem; }
   .event-item { padding: 16px; }
   .event-actions, .event-actions .button { width: 100%; }
   .event-actions .button { justify-content: center; }
