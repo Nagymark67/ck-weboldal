@@ -134,6 +134,14 @@ button, .button { cursor: pointer; }
 .photo-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; transition: transform .35s ease; }
 .photo-card:hover img { transform: scale(1.04); }
 .photo-card figcaption { padding: 14px 16px 16px; color: var(--wine); font-weight: 700; }
+.roulette-card { width: min(760px, 100%); margin: 0 auto; text-align: center; }
+.roulette-stage { padding: clamp(24px, 6vw, 58px) 18px; border-radius: 20px; background: radial-gradient(circle at 50% 0, #fff, var(--wine-soft)); }
+.roulette-result, .roulette-song { color: var(--wine); font-size: clamp(1.7rem, 5vw, 3rem); font-weight: 800; line-height: 1.15; min-height: 1.3em; }
+.roulette-song { margin-bottom: 24px; font-size: clamp(1.4rem, 4vw, 2.3rem); }
+.roulette-result.spinning, .roulette-song.spinning { animation: roulette-pulse .15s linear infinite alternate; }
+.roulette-actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+.roulette-note { margin: 26px auto 0; max-width: 560px; color: var(--muted); font-size: .9rem; }
+@keyframes roulette-pulse { from { opacity: .55; transform: translateY(2px); } to { opacity: 1; transform: translateY(-2px); } }
 .feature-card { padding: 24px; border-radius: 18px; background: var(--wine-soft); transition: transform .2s, box-shadow .2s; }
 .feature-card:hover { transform: translateY(-5px); box-shadow: var(--shadow); }
 .feature-card h3 { color: var(--wine); margin-top: 0; }
