@@ -235,11 +235,6 @@ window.NOTARULETT_SONGS = [
     "page": 93
   },
   {
-    "title": "Bujdosópohár",
-    "category": "Egyéb nóták",
-    "page": 208
-  },
-  {
     "title": "Bumfalva",
     "category": "További Bursch-nóták",
     "page": 173
@@ -463,11 +458,6 @@ window.NOTARULETT_SONGS = [
     "title": "Hagyjátok csak",
     "category": "Szakestélyes nóták",
     "page": 32
-  },
-  {
-    "title": "Harz-hegységi szózat",
-    "category": "Egyéb nóták",
-    "page": 224
   },
   {
     "title": "Hattyútollazó",
@@ -853,10 +843,5 @@ window.NOTARULETT_SONGS = [
     "title": "Vivat Bacchus",
     "category": "További Bursch-nóták",
     "page": 131
-  },
-  {
-    "title": "Zöldüljön a fenyőnk!",
-    "category": "Szaknóták",
-    "page": 66
   }
 ];

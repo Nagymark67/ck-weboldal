@@ -3,7 +3,6 @@
   const categoryResult = document.getElementById('categoryResult');
   const songResult = document.getElementById('songResult');
   const spinButton = document.getElementById('spinButton');
-  const againButton = document.getElementById('againButton');
   if (!categoryResult || !songResult || !spinButton || !songs.length) return;
 
   const categories = [...new Set(songs.map((song) => song.category))];
@@ -13,7 +12,6 @@
 
   async function spin() {
     spinButton.disabled = true;
-    againButton.hidden = true;
     songResult.textContent = 'A kategória forog…';
     categoryResult.classList.add('spinning');
     for (let i = 0; i < 12; i += 1) {
@@ -33,9 +31,7 @@
     songResult.textContent = pick(eligible).title;
     songResult.classList.remove('spinning');
     spinButton.textContent = 'Új kategória';
-    againButton.hidden = false;
     spinButton.disabled = false;
   }
   spinButton.addEventListener('click', spin);
-  againButton.addEventListener('click', spin);
 })();

@@ -14,16 +14,24 @@
     while (date.getMonth() === 11 && date.getDate() === 25) date.setDate(date.getDate() + 7);
     return date;
   };
-  const googleCalendarUrl = (date) => {
+  const googleCalendarUrl = (date, event = {}) => {
     const pad = (value) => String(value).padStart(2, '0');
     const start = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T190000`;
     const end = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T220000`;
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(songName)}&dates=${start}/${end}&ctz=Europe%2FBudapest&location=${encodeURIComponent(songLocation)}&details=${encodeURIComponent('Heti nótázás a Cantusok Körével.')}`;
+    const title = event.title || songName;
+    const location = event.location || songLocation;
+    const details = event.details || 'Heti nótázás a Cantusok Körével.';
+    const endDate = new Date(date.getTime() + 3 * 60 * 60 * 1000);
+    const endTime = `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`;
+    const customTime = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}00`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${customTime}/${endTime}&ctz=Europe%2FBudapest&location=${encodeURIComponent(location)}&details=${encodeURIComponent(details)}`;
   };
   const formatDate = (date) => date.toLocaleString('hu-HU', { weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   if (songTarget) {
     const date = nextSong();
     songTarget.textContent = `${formatDate(date)} – ${songLocation}`;
+    const addNextSong = document.getElementById('addNextSong');
+    if (addNextSong) addNextSong.href = googleCalendarUrl(date);
   }
   if (eventList) {
     const events = [{
@@ -33,6 +41,12 @@
       details: 'Immáron XIX. alkalommal kerül megrendezésre a Cantusok Köre Szüreti Mulatsága, melynek pontos időpontja november 14. napja lesz.\n\nA rendezvény hivatalos itala a szürethez híven, a bor lesz.\n\nBelépő: 6500 Ft, elsőéves BSC hallgatóknak 5000 Ft.\n\nProgramterv:\n09:00 Reggeli\n10:00–11:30 Tanítványok által játékos feladatok\n12:00 Ebéd vaddisznóhúsos pincepörkölttel a la Cantusok Köre\n13:00 (opcionális) Cantus verseny és söpröng\n13:00–17:30 Ismerkedés az ifjúsággal\n18:00 Nedvesest kezdete\n\nNovember 15.: Környes búcsú, utolsó nótázó.\n\nJelentkezés: forms.gle/bHwJE93sWEyFUCUL6',
       link: 'https://forms.gle/bHwJE93sWEyFUCUL6'
     }];
+    try {
+      const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
+      if (Array.isArray(savedEvents)) savedEvents.forEach((event) => events.push({ ...event, date: new Date(event.date) }));
+    } catch (error) {
+      console.warn('Could not load saved events', error);
+    }
     let date = nextSong();
     for (let i = 0; i < 52; i += 1) {
       events.push({ date, title: songName, location: songLocation });
@@ -47,11 +61,23 @@
       visible.forEach((event) => {
         const item = document.createElement('article');
         item.className = 'event-item';
-        item.innerHTML = `<div><h3>${event.title}</h3><p>${formatDate(event.date)} · ${event.location}</p>${event.details ? `<p class="event-details">${event.details}</p>` : ''}</div>`;
+        const content = document.createElement('div');
+        const title = document.createElement('h3');
+        title.textContent = event.title;
+        const metadata = document.createElement('p');
+        metadata.textContent = `${formatDate(event.date)} · ${event.location}`;
+        content.append(title, metadata);
+        if (event.details) {
+          const details = document.createElement('p');
+          details.className = 'event-details';
+          details.textContent = event.details;
+          content.appendChild(details);
+        }
+        item.appendChild(content);
         const actions = document.createElement('div');
         actions.className = 'event-actions';
         const add = document.createElement('a');
-        add.className = 'button button-outline'; add.href = googleCalendarUrl(event.date); add.target = '_blank'; add.rel = 'noopener'; add.textContent = 'Google Naptár';
+        add.className = 'button button-outline'; add.href = googleCalendarUrl(event.date, event); add.target = '_blank'; add.rel = 'noopener'; add.textContent = 'Google Naptár';
         actions.appendChild(add); item.appendChild(actions); eventList.appendChild(item);
         if (event.link) {
           const registration = document.createElement('a');
@@ -63,10 +89,32 @@
       if (noEvents) noEvents.hidden = visible.length > 0;
     };
     search?.addEventListener('input', renderEvents);
-    document.getElementById('addNextSong')?.addEventListener('click', () => {
-      window.open(googleCalendarUrl(events[0].date), '_blank', 'noopener');
-    });
     renderEvents();
+    const eventButton = document.getElementById('addEventButton');
+    const eventModal = document.getElementById('eventModal');
+    const eventForm = document.getElementById('eventForm');
+    const closeEventModal = () => { if (eventModal) eventModal.hidden = true; };
+    eventButton?.addEventListener('click', () => { if (eventModal) eventModal.hidden = false; });
+    document.getElementById('closeEventModal')?.addEventListener('click', closeEventModal);
+    document.getElementById('cancelEvent')?.addEventListener('click', closeEventModal);
+    eventForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const form = new FormData(eventForm);
+      const created = {
+        title: String(form.get('title') || '').trim(),
+        location: String(form.get('location') || '').trim(),
+        date: new Date(String(form.get('date'))).toISOString(),
+        details: String(form.get('description') || '').trim()
+      };
+      if (!created.title || !created.location || Number.isNaN(new Date(created.date).getTime())) return;
+      const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
+      savedEvents.push(created);
+      localStorage.setItem('cantusok-events', JSON.stringify(savedEvents));
+      events.push({ ...created, date: new Date(created.date) });
+      eventForm.reset();
+      closeEventModal();
+      renderEvents();
+    });
   }
   const menuToggle = document.querySelector('.menu-toggle');
   const accountToggle = document.querySelector('.account-toggle');
@@ -93,6 +141,9 @@
     }
   }
   checkUser().then((user) => {
+    const eventButton = document.getElementById('addEventButton');
+    const canManageEvents = user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role)));
+    if (eventButton && canManageEvents) eventButton.hidden = false;
     if (!user || !authLinks || !loggedInLinks) return;
     authLinks.hidden = true;
     loggedInLinks.hidden = false;
