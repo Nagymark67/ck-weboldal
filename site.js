@@ -1,5 +1,50 @@
 (() => {
   const body = document.body;
+  const header = document.querySelector('.site-header');
+  const savedTheme = localStorage.getItem('cantusok-theme');
+  if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
+  const nav = document.querySelector('.site-nav');
+  const controlHost = nav || document.querySelector('.header-inner');
+  if (header && controlHost) {
+    const themeButton = document.createElement('button');
+    themeButton.className = 'theme-toggle';
+    themeButton.type = 'button';
+    const updateThemeLabel = () => { themeButton.textContent = document.documentElement.dataset.theme === 'dark' ? 'Világos' : 'Sötét'; };
+    updateThemeLabel();
+    themeButton.addEventListener('click', () => {
+      const dark = document.documentElement.dataset.theme !== 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      localStorage.setItem('cantusok-theme', dark ? 'dark' : 'light');
+      updateThemeLabel();
+    });
+    const bugButton = document.createElement('button');
+    bugButton.className = 'bug-report-toggle';
+    bugButton.type = 'button';
+    bugButton.textContent = 'Hibajelentés';
+    controlHost.append(themeButton, bugButton);
+    bugButton.addEventListener('click', () => { const modal = document.getElementById('bugReportModal'); if (modal) modal.hidden = false; });
+  }
+  if (header) {
+    const updateHeader = () => header.classList.toggle('scrolled', window.scrollY > 24);
+    window.addEventListener('scroll', updateHeader, { passive: true });
+    updateHeader();
+  }
+  const bugModal = document.createElement('div');
+  bugModal.id = 'bugReportModal';
+  bugModal.className = 'bug-report-modal';
+  bugModal.hidden = true;
+  bugModal.innerHTML = '<div class="bug-report-card" role="dialog" aria-modal="true" aria-labelledby="bugReportTitle"><button class="modal-close" type="button" aria-label="Bezárás">×</button><p class="eyebrow">Segíts javítani az oldalt</p><h2 id="bugReportTitle">Hibajelentés</h2><form><label for="bugSubject">Tárgy</label><input id="bugSubject" required maxlength="120"><label for="bugDescription">Mi történt?</label><textarea id="bugDescription" rows="7" required maxlength="4000"></textarea><div class="modal-actions"><button class="button button-outline" type="button" data-close-bug>Mégse</button><button class="button" type="submit">E-mail megnyitása</button></div></form></div>';
+  document.body.appendChild(bugModal);
+  const closeBug = () => { bugModal.hidden = true; };
+  bugModal.querySelector('.modal-close').addEventListener('click', closeBug);
+  bugModal.querySelector('[data-close-bug]').addEventListener('click', closeBug);
+  bugModal.querySelector('form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const subject = document.getElementById('bugSubject').value.trim();
+    const description = document.getElementById('bugDescription').value.trim();
+    window.location.href = `mailto:nagymark2357@gmail.com?subject=${encodeURIComponent(`[Weboldal hibajelentés] ${subject}`)}&body=${encodeURIComponent(`${description}\n\nOldal: ${window.location.href}`)}`;
+    closeBug();
+  });
   const songTarget = document.getElementById('next-daltanitas');
   const eventList = document.getElementById('eventList');
   const search = document.getElementById('eventSearch');

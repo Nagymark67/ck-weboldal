@@ -7,17 +7,30 @@
   --paper: #fff;
   --background: #f7f5f4;
   --shadow: 0 18px 50px rgba(73, 0, 0, .1);
+  --surface-border: #eee;
+}
+[data-theme="dark"] {
+  --ink: #f7eeee;
+  --muted: #cbbaba;
+  --paper: #241a1a;
+  --background: #120e0e;
+  --wine-soft: #3a2020;
+  --surface-border: #4a3636;
+  --shadow: 0 18px 50px rgba(0, 0, 0, .35);
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
+  position: relative;
   color: var(--ink);
   background: var(--background);
   font-family: "Segoe UI", Roboto, Arial, sans-serif;
   line-height: 1.6;
 }
+body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; background: url("/CK%20c%C3%ADmer%20fekete-feh%C3%A9r.png") center/ min(70vw, 700px) no-repeat; opacity: .035; filter: grayscale(1); }
+[data-theme="dark"] body::before { opacity: .08; filter: invert(1) grayscale(1); }
 a { color: var(--wine); }
 button, input, select, textarea { font: inherit; }
 button, .button { cursor: pointer; }
@@ -30,6 +43,7 @@ button, .button { cursor: pointer; }
   color: #fff;
   box-shadow: 0 8px 25px rgba(0, 0, 0, .12);
   backdrop-filter: blur(12px);
+  transition: background .25s, box-shadow .25s;
 }
 .header-inner {
   width: min(1180px, calc(100% - 32px));
@@ -38,7 +52,11 @@ button, .button { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 24px;
+  transition: min-height .25s, gap .25s;
 }
+.site-header.scrolled .header-inner { min-height: 58px; gap: 14px; }
+.site-header.scrolled .brand img { width: 40px; height: 40px; }
+.site-header.scrolled .site-nav a, .site-header.scrolled .account-toggle, .site-header.scrolled .theme-toggle, .site-header.scrolled .bug-report-toggle { padding-top: 6px; padding-bottom: 6px; }
 .brand {
   display: inline-flex;
   align-items: center;
@@ -66,6 +84,8 @@ button, .button { cursor: pointer; }
 }
 .account-toggle { border: 1px solid rgba(255,255,255,.45); }
 .menu-toggle { display: none; font-size: 1.5rem; }
+.theme-toggle, .bug-report-toggle { color: #fff; border: 1px solid rgba(255,255,255,.45); background: transparent; border-radius: 999px; padding: 9px 12px; cursor: pointer; }
+.bug-report-toggle { border-color: rgba(255,220,220,.7); }
 
 .page-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 70px; }
 .hero {
@@ -108,7 +128,7 @@ button, .button { cursor: pointer; }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-items: start; }
 .news-card { min-height: 260px; }
 .online-list { padding-left: 20px; }
-.news-post { padding: 18px 0; border-bottom: 1px solid #eee; }
+.news-post { padding: 18px 0; border-bottom: 1px solid var(--surface-border); }
 .news-post:last-child { border-bottom: 0; }
 .next-song-card { margin: 0 0 28px; background: linear-gradient(120deg, #fff, var(--wine-soft)); }
 .next-song-card h2 { margin: 0; color: var(--wine); }
@@ -116,7 +136,7 @@ button, .button { cursor: pointer; }
 .calendar-toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
 .calendar-toolbar input { flex: 1 1 260px; border: 1px solid #d9cece; border-radius: 999px; padding: 12px 16px; }
 .event-list { display: grid; gap: 14px; }
-.event-item { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 20px; border: 1px solid #eee; border-radius: 16px; background: #fff; }
+.event-item { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 20px; border: 1px solid var(--surface-border); border-radius: 16px; background: var(--paper); }
 .event-item h3 { margin: 0 0 4px; color: var(--wine); }
 .event-item p { margin: 0; color: var(--muted); }
 .event-details { margin-top: 12px !important; white-space: pre-line; color: var(--ink) !important; }
@@ -152,6 +172,12 @@ button, .button { cursor: pointer; }
 .modal-card label { margin-top: 8px; color: var(--wine); font-weight: 700; }
 .modal-card input, .modal-card textarea { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.bug-report-modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgb(31 8 8 / 55%); }
+.bug-report-modal[hidden] { display: none; }
+.bug-report-card { width: min(620px, 100%); padding: 30px; border-radius: 20px; background: var(--paper); box-shadow: var(--shadow); }
+.bug-report-card form { display: grid; gap: 8px; }
+.bug-report-card label { margin-top: 8px; color: var(--wine); font-weight: 700; }
+.bug-report-card input, .bug-report-card textarea { width: 100%; padding: 12px 14px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--paper); color: var(--ink); font: inherit; }
 .next-song-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 #addEventButton[hidden] { display: none; }
 @keyframes roulette-pulse { from { opacity: .55; transform: translateY(2px); } to { opacity: 1; transform: translateY(-2px); } }
@@ -166,7 +192,7 @@ button, .button { cursor: pointer; }
   z-index: 30;
   width: min(360px, 92vw);
   padding: 90px 28px 28px;
-  background: #fff;
+  background: var(--paper);
   box-shadow: -15px 0 45px rgba(0,0,0,.18);
   transform: translateX(105%);
   transition: transform .28s ease;
@@ -176,7 +202,7 @@ body.drawer-open .drawer-backdrop { display: block; }
 .drawer-close { position: absolute; top: 20px; right: 22px; border: 0; background: transparent; color: var(--wine); font-size: 2rem; }
 .account-drawer .button { width: 100%; margin-bottom: 12px; }
 
-.form-card { width: min(480px, 100%); margin: 60px auto; padding: 34px; background: #fff; border-radius: 24px; box-shadow: var(--shadow); }
+.form-card { width: min(480px, 100%); margin: 60px auto; padding: 34px; background: var(--paper); border-radius: 24px; box-shadow: var(--shadow); }
 .form-card h2 { margin-top: 0; color: var(--wine); text-align: center; }
 .form-card form { display: grid; gap: 14px; }
 .form-card input, .form-card select, .form-card textarea { width: 100%; border: 1px solid #d9cece; border-radius: 10px; padding: 12px 14px; background: #fff; }
@@ -185,7 +211,7 @@ footer { padding: 28px 16px; color: var(--muted); text-align: center; }
 
 .modal-backdrop { display: none; position: fixed; inset: 0; z-index: 40; place-items: center; background: rgba(20,0,0,.5); padding: 20px; }
 .modal-backdrop.open { display: grid; }
-.modal { width: min(760px, 100%); padding: 26px; border-radius: 20px; background: #fff; box-shadow: var(--shadow); }
+.modal { width: min(760px, 100%); padding: 26px; border-radius: 20px; background: var(--paper); box-shadow: var(--shadow); }
 .modal textarea { width: 100%; min-height: 150px; padding: 12px; border: 1px solid #ddd; border-radius: 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .floating-create { position: fixed; right: 24px; bottom: 24px; z-index: 15; display: none; width: 58px; height: 58px; border: 0; border-radius: 50%; background: var(--wine); color: #fff; font-size: 2rem; box-shadow: var(--shadow); }
