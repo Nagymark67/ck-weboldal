@@ -111,6 +111,18 @@ button, .button { cursor: pointer; }
 .online-list { padding-left: 20px; }
 .news-post { padding: 18px 0; border-bottom: 1px solid #eee; }
 .news-post:last-child { border-bottom: 0; }
+.next-song-card { margin: 0 0 28px; background: linear-gradient(120deg, #fff, var(--wine-soft)); }
+.next-song-card h2 { margin: 0; color: var(--wine); }
+.next-song-card p:not(.eyebrow) { margin: 6px 0 18px; font-size: 1.1rem; }
+.calendar-toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.calendar-toolbar input { flex: 1 1 260px; border: 1px solid #d9cece; border-radius: 999px; padding: 12px 16px; }
+.event-list { display: grid; gap: 14px; }
+.event-item { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 20px; border: 1px solid #eee; border-radius: 16px; background: #fff; }
+.event-item h3 { margin: 0 0 4px; color: var(--wine); }
+.event-item p { margin: 0; color: var(--muted); }
+.event-details { margin-top: 12px !important; white-space: pre-line; color: var(--ink) !important; }
+.event-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 600px) { .event-item { align-items: flex-start; flex-direction: column; } .event-actions { justify-content: flex-start; } }
 .news-meta { color: var(--muted); font-size: .9rem; }
 .news-content { margin: 8px 0 0; }
 .page-heading { margin-top: 20px; }

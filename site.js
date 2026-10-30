@@ -1,5 +1,73 @@
 (() => {
   const body = document.body;
+  const songTarget = document.getElementById('next-daltanitas');
+  const eventList = document.getElementById('eventList');
+  const search = document.getElementById('eventSearch');
+  const songName = 'Daltanítás';
+  const songLocation = 'Liget Söröző';
+  const nextSong = (from = new Date()) => {
+    const date = new Date(from);
+    date.setHours(19, 0, 0, 0);
+    const daysUntilMonday = (8 - date.getDay()) % 7;
+    date.setDate(date.getDate() + daysUntilMonday);
+    if (date <= from) date.setDate(date.getDate() + 7);
+    while (date.getMonth() === 11 && date.getDate() === 25) date.setDate(date.getDate() + 7);
+    return date;
+  };
+  const googleCalendarUrl = (date) => {
+    const pad = (value) => String(value).padStart(2, '0');
+    const start = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T190000`;
+    const end = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T220000`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(songName)}&dates=${start}/${end}&ctz=Europe%2FBudapest&location=${encodeURIComponent(songLocation)}&details=${encodeURIComponent('Heti nótázás a Cantusok Körével.')}`;
+  };
+  const formatDate = (date) => date.toLocaleString('hu-HU', { weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (songTarget) {
+    const date = nextSong();
+    songTarget.textContent = `${formatDate(date)} – ${songLocation}`;
+  }
+  if (eventList) {
+    const events = [{
+      date: new Date(2026, 10, 14, 8, 30),
+      title: 'Cantusok Köre Szüreti Mulatság',
+      location: 'Liget Söröző',
+      details: 'Immáron XIX. alkalommal kerül megrendezésre a Cantusok Köre Szüreti Mulatsága, melynek pontos időpontja november 14. napja lesz.\n\nA rendezvény hivatalos itala a szürethez híven, a bor lesz.\n\nBelépő: 6500 Ft, elsőéves BSC hallgatóknak 5000 Ft.\n\nProgramterv:\n09:00 Reggeli\n10:00–11:30 Tanítványok által játékos feladatok\n12:00 Ebéd vaddisznóhúsos pincepörkölttel a la Cantusok Köre\n13:00 (opcionális) Cantus verseny és söpröng\n13:00–17:30 Ismerkedés az ifjúsággal\n18:00 Nedvesest kezdete\n\nNovember 15.: Környes búcsú, utolsó nótázó.\n\nJelentkezés: forms.gle/bHwJE93sWEyFUCUL6',
+      link: 'https://forms.gle/bHwJE93sWEyFUCUL6'
+    }];
+    let date = nextSong();
+    for (let i = 0; i < 52; i += 1) {
+      events.push({ date, title: songName, location: songLocation });
+      date = new Date(date);
+      date.setDate(date.getDate() + 7);
+      if (date.getMonth() === 11 && date.getDate() === 25) date.setDate(date.getDate() + 7);
+    }
+    const renderEvents = () => {
+      const query = (search?.value || '').trim().toLocaleLowerCase('hu-HU');
+      eventList.replaceChildren();
+      const visible = events.filter((event) => `${event.title} ${event.location} ${formatDate(event.date)}`.toLocaleLowerCase('hu-HU').includes(query));
+      visible.forEach((event) => {
+        const item = document.createElement('article');
+        item.className = 'event-item';
+        item.innerHTML = `<div><h3>${event.title}</h3><p>${formatDate(event.date)} · ${event.location}</p>${event.details ? `<p class="event-details">${event.details}</p>` : ''}</div>`;
+        const actions = document.createElement('div');
+        actions.className = 'event-actions';
+        const add = document.createElement('a');
+        add.className = 'button button-outline'; add.href = googleCalendarUrl(event.date); add.target = '_blank'; add.rel = 'noopener'; add.textContent = 'Google Naptár';
+        actions.appendChild(add); item.appendChild(actions); eventList.appendChild(item);
+        if (event.link) {
+          const registration = document.createElement('a');
+          registration.className = 'button'; registration.href = event.link; registration.target = '_blank'; registration.rel = 'noopener'; registration.textContent = 'Jelentkezési űrlap';
+          actions.appendChild(registration);
+        }
+      });
+      const noEvents = document.getElementById('noEvents');
+      if (noEvents) noEvents.hidden = visible.length > 0;
+    };
+    search?.addEventListener('input', renderEvents);
+    document.getElementById('addNextSong')?.addEventListener('click', () => {
+      window.open(googleCalendarUrl(events[0].date), '_blank', 'noopener');
+    });
+    renderEvents();
+  }
   const menuToggle = document.querySelector('.menu-toggle');
   const accountToggle = document.querySelector('.account-toggle');
   const backdrop = document.querySelector('.drawer-backdrop');
