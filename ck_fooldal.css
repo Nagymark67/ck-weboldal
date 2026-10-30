@@ -15,6 +15,8 @@
   --paper: #241a1a;
   --background: #120e0e;
   --wine-soft: #3a2020;
+  --wine: #ff8f8f;
+  --wine-dark: #ffc0c0;
   --surface-border: #4a3636;
   --shadow: 0 18px 50px rgba(0, 0, 0, .35);
 }
@@ -85,6 +87,8 @@ button, .button { cursor: pointer; }
 .menu-toggle { display: none; font-size: 1.5rem; }
 .theme-toggle, .bug-report-toggle { color: #fff; border: 1px solid rgba(255,255,255,.45); background: transparent; border-radius: 999px; padding: 9px 12px; cursor: pointer; }
 .bug-report-toggle { border-color: rgba(255,220,220,.7); }
+.floating-theme-toggle { color: #211b1b; border-color: #211b1b; background: #fff; }
+[data-theme="dark"] .floating-theme-toggle { color: #fff; border-color: #fff; background: #211b1b; }
 .floating-theme-toggle, .floating-bug-toggle { position: fixed; bottom: 24px; z-index: 15; box-shadow: var(--shadow); }
 .floating-theme-toggle { left: 24px; }
 .floating-bug-toggle { right: 24px; }
@@ -138,6 +142,10 @@ body.can-create-post .floating-bug-toggle { bottom: 94px; }
 .next-song-card p:not(.eyebrow) { margin: 6px 0 18px; font-size: 1.1rem; }
 .calendar-toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
 .calendar-toolbar input { flex: 1 1 260px; border: 1px solid #d9cece; border-radius: 999px; padding: 12px 16px; }
+[data-theme="dark"] .calendar-toolbar input,
+[data-theme="dark"] .form-card input,
+[data-theme="dark"] .form-card select,
+[data-theme="dark"] .form-card textarea { border-color: var(--surface-border); background: var(--paper); color: var(--ink); }
 .event-list { display: grid; gap: 14px; }
 .event-item { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 20px; border: 1px solid var(--surface-border); border-radius: 16px; background: var(--paper); }
 .event-item h3 { margin: 0 0 4px; color: var(--wine); }
@@ -154,6 +162,7 @@ body.can-create-post .floating-bug-toggle { bottom: 94px; }
 .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .photo-card { overflow: hidden; padding: 0; background: #fff; border-radius: 18px; box-shadow: var(--shadow); }
+[data-theme="dark"] .photo-card { background: var(--paper); }
 .photo-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; transition: transform .35s ease; }
 .photo-card:hover img { transform: scale(1.04); }
 .add-photo-button { display: block; margin: 24px auto 0; }
