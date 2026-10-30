@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from html.parser import HTMLParser
 
 import requests
 import streamlit as st
@@ -33,6 +34,53 @@ VISIBILITY = {
 }
 
 
+class MemberSectionParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.in_members = False
+        self.heading = None
+        self.capturing_heading = False
+        self.current_item = None
+        self.sections = {}
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "section" and attributes.get("id") == "all-members":
+            self.in_members = True
+        elif self.in_members and tag == "h3":
+            self.heading = ""
+            self.capturing_heading = True
+        elif self.in_members and tag == "li":
+            self.current_item = ""
+
+    def handle_endtag(self, tag):
+        if tag == "section" and self.in_members:
+            self.in_members = False
+        elif tag == "h3" and self.heading is not None:
+            self.heading = self.heading.strip()
+            self.sections.setdefault(self.heading, [])
+            self.capturing_heading = False
+        elif tag == "li" and self.current_item is not None:
+            if self.heading:
+                self.sections.setdefault(self.heading, []).append(self.current_item.strip())
+            self.current_item = None
+
+    def handle_data(self, data):
+        if self.capturing_heading:
+            self.heading += data
+        if self.current_item is not None:
+            self.current_item += data
+
+
+def member_sections():
+    source = ROOT / "index.html"
+    if not source.exists():
+        return {}
+    parser = MemberSectionParser()
+    parser.feed(source.read_text(encoding="utf-8"))
+    return parser.sections
+
+
 def configure_page():
     st.set_page_config(
         page_title="Cantusok Köre",
@@ -43,21 +91,39 @@ def configure_page():
     st.markdown(
         """
         <style>
-        .stApp { background: #f6f7fb; color: #222; }
+        .stApp { background: #f6f7fb; color: #222; font-family: 'Segoe UI', 'Roboto', Arial, sans-serif; }
         [data-testid="stHeader"] { background: transparent; }
+        [data-testid="stSidebar"] { display: none; }
+        .block-container { max-width: 1200px; padding: 0 1rem 2rem; }
         .ck-header {
             background: linear-gradient(90deg, #8B0000 60%, #a83232 100%);
-            border-radius: 0 0 24px 24px; padding: 18px 28px;
+            border-radius: 0 0 24px 24px; padding: 24px 40px 16px;
             color: white; box-shadow: 0 2px 12px rgba(0,0,0,.08);
+        }
+        .ck-header img { max-height: 120px; object-fit: contain; }
+        .ck-auth {
+            display: flex; justify-content: flex-end; gap: 8px; align-items: center;
+            margin: 10px 0 18px; color: #8B0000; font-weight: 600;
         }
         .ck-card {
             background: white; border-radius: 18px; padding: 22px 28px;
             margin: 18px 0; box-shadow: 0 4px 24px rgba(139,0,0,.07);
         }
-        .ck-user { color: #8B0000; font-weight: 600; text-align: right; }
+        .ck-toc, .ck-online {
+            background: white; border-radius: 18px; padding: 22px 24px;
+            box-shadow: 0 4px 24px rgba(139,0,0,.07); margin-top: 18px;
+        }
+        .ck-toc h3, .ck-online h3 { color: #8B0000; margin-top: 0; }
+        .ck-toc a { color: #8B0000; text-decoration: none; line-height: 1.9; }
+        .ck-user { color: #8B0000; font-weight: 600; text-align: right; margin-bottom: 8px; }
         h1, h2, h3 { color: #8B0000; }
+        .stButton > button { border-radius: 20px; border: 1px solid #eee; }
         div.stButton > button[kind="primary"] {
             background: #8B0000; border-color: #8B0000; color: white;
+        }
+        @media (max-width: 900px) {
+            .ck-header { padding: 16px; }
+            .block-container { padding: 0 .5rem 1rem; }
         }
         </style>
         """,
@@ -108,22 +174,69 @@ def render_header(user):
         )
 
 
+def render_navigation(user, view):
+    columns = st.columns([1, 1, 1, 2.4])
+    labels = [("Főoldal", "Főoldal"), ("Bejelentkezés", "Bejelentkezés"), ("Regisztráció", "Regisztráció")]
+    for column, (target, label) in zip(columns, labels):
+        with column:
+            if st.button(label, key=f"nav_{target}", type="primary" if view == target else "secondary"):
+                st.session_state.active_view = target
+                st.rerun()
+    with columns[3]:
+        if user:
+            st.markdown(
+                f'<div class="ck-user">Bejelentkezve: {user.get("username", "")}</div>',
+                unsafe_allow_html=True,
+            )
+
+
 def render_online_users(session):
-    st.markdown("### Online felhasználók")
+    st.markdown('<div class="ck-online"><h3>Online felhasználók</h3>', unsafe_allow_html=True)
     try:
         response = api_request(session, "GET", "/online-users")
         payload = response.json() if response.ok else {}
     except (requests.RequestException, ValueError):
         st.caption("Az online lista jelenleg nem érhető el.")
+        st.markdown("</div>", unsafe_allow_html=True)
         return
     users = payload.get("users", []) if isinstance(payload, dict) else []
     if not users:
         st.caption("Nincs online felhasználó.")
+        st.markdown("</div>", unsafe_allow_html=True)
         return
     for user in users:
         if isinstance(user, dict):
             status = f" ({user['status']})" if user.get("status") else ""
             st.write(f"• {user.get('username', 'Ismeretlen')}{status}")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_contents():
+    st.markdown(
+        """
+        <div class="ck-toc">
+        <h3>Az Oldal Tartalma</h3>
+        <a href="#rolunk">Rólunk</a><br>
+        <a href="#all-members">Tagok listája</a><br>
+        &nbsp;&nbsp;<a href="#alapito-tagok">Alapító tagok</a><br>
+        &nbsp;&nbsp;<a href="#rendes-tagok">Rendes tagok</a><br>
+        &nbsp;&nbsp;<a href="#soproni-tagok">Soproni tagok</a><br>
+        &nbsp;&nbsp;<a href="#szekesfehervari-tag">Székesfehérvári tag</a><br>
+        &nbsp;&nbsp;<a href="#tiszteletbeli-tagok">Tiszteletbeli tagok</a><br>
+        <a href="#kapcsolat">Kapcsolat</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_members():
+    sections = member_sections()
+    st.subheader("Tagok listája")
+    for heading, names in sections.items():
+        st.markdown(f"#### {heading}")
+        if names:
+            st.markdown("\n".join(f"- {name}" for name in names))
 
 
 def render_feed(session, can_post):
@@ -214,25 +327,32 @@ def render_composer(session):
 
 
 def render_home(session, user):
-    st.markdown('<div class="ck-card">', unsafe_allow_html=True)
-    hero = f"{API_BASE_URL}/uploads/hero.jpg"
-    if os.path.exists(ROOT / "uploads" / "hero.jpg"):
-        st.image(str(ROOT / "uploads" / "hero.jpg"), use_container_width=True)
-    else:
-        st.image(hero, use_container_width=True)
-    st.subheader("Rólunk")
-    st.write("A Cantusok Köre közösségének hivatalos oldala.")
-    st.markdown("</div>", unsafe_allow_html=True)
-    render_feed(session, bool(user and (
-        user.get("isAllTimeAdmin")
-        or {"cantus_praeses", "jegyzo"} & set(user.get("roles", []))
-    )))
-    st.markdown('<div class="ck-card">', unsafe_allow_html=True)
-    st.subheader("Tagok listája")
-    st.write("A tagokkal kapcsolatos információk és közösségi hírek ezen az oldalon érhetők el.")
-    st.subheader("Kapcsolat")
-    st.write("Kérdés esetén vedd fel velünk a kapcsolatot a közösség hivatalos csatornáin.")
-    st.markdown("</div>", unsafe_allow_html=True)
+    left, center, right = st.columns([1, 2.2, 1])
+    with left:
+        render_contents()
+    with center:
+        hero = f"{API_BASE_URL}/uploads/hero.jpg"
+        if os.path.exists(ROOT / "uploads" / "hero.jpg"):
+            st.image(str(ROOT / "uploads" / "hero.jpg"), use_container_width=True)
+        else:
+            st.image(hero, use_container_width=True)
+        st.markdown('<div class="ck-card" id="rolunk">', unsafe_allow_html=True)
+        st.subheader("Rólunk")
+        st.write("placeholder")
+        st.markdown("</div>", unsafe_allow_html=True)
+        render_feed(session, bool(user and (
+            user.get("isAllTimeAdmin")
+            or {"cantus_praeses", "jegyzo"} & set(user.get("roles", []))
+        )))
+        st.markdown('<div class="ck-card" id="all-members">', unsafe_allow_html=True)
+        render_members()
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown('<div class="ck-card" id="kapcsolat">', unsafe_allow_html=True)
+        st.subheader("Kapcsolat")
+        st.write("Amennyiben kérdéseid vannak, elérhetsz minket a [Facebook](https://www.facebook.com/CantusokKore/?locale=hu_HU) oldalunkon keresztül, illetve a vezetőséget is nyugodtan keresheted.")
+        st.markdown("</div>", unsafe_allow_html=True)
+    with right:
+        render_online_users(session)
 
 
 def render_login(session):
@@ -294,13 +414,7 @@ def render_register(session):
 def main():
     configure_page()
     session = get_api_session()
-    with st.sidebar:
-        st.markdown("## Cantusok Köre")
-        view = st.radio(
-            "Navigáció",
-            ["Főoldal", "Bejelentkezés", "Regisztráció"],
-            key="active_view",
-        )
+    view = st.session_state.get("active_view", "Főoldal")
     user = current_user(session) if view in {"Főoldal", "Bejelentkezés"} else None
     if user is None and st.session_state.get("was_authenticated"):
         reset_api_session()
@@ -308,12 +422,11 @@ def main():
         st.session_state.was_authenticated = False
     elif user:
         st.session_state.was_authenticated = True
-
     render_header(user)
-    with st.sidebar:
-        if view == "Főoldal":
-            render_online_users(session)
-        if user and st.button("Kijelentkezés"):
+    render_header(user)
+    render_navigation(user, view)
+    if user:
+        if st.button("Kijelentkezés", key="logout_top"):
             try:
                 response = api_request(session, "POST", "/logout")
                 if not response.ok:
