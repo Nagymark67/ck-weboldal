@@ -3,9 +3,18 @@ const session = require('express-session');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const smtpTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+  ? nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  })
+  : null;
 const { Pool } = require('pg');
 const multer = require('multer');
 const fs = require('fs');
@@ -139,8 +148,9 @@ app.use((err, req, res, next) => {
 
 
 app.post('/register', async (req, res) => {
-  const { username, password, status } = req.body;
+  const { username, password, status, email } = req.body;
   if (!username || !password || !status) return res.status(400).json({ message: 'Hiányzó adatok!' });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) return res.status(400).json({ message: 'Érvénytelen e-mail cím.' });
 
   try {
     
@@ -168,7 +178,7 @@ app.post('/register', async (req, res) => {
     
     const salt = await bcrypt.genSalt(10);
     const hashed = await bcrypt.hash(password, salt);
-    await query('INSERT INTO registered_users (username, password, status) VALUES (?, ?, ?)', [username, hashed, status]);
+    await query('INSERT INTO registered_users (username, password, status, email) VALUES (?, ?, ?, ?)', [username, hashed, status, email ? String(email).trim().toLowerCase() : null]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error in /register:', err && err.stack ? err.stack : err);
@@ -534,11 +544,14 @@ app.post('/gallery', galleryUpload.single('image'), async (req, res) => {
 });
 
 app.post('/logout', (req, res) => {
-  const username = req.session.user;
+  const username = req.session && req.session.user;
   onlineUsers = onlineUsers.filter(u => u !== username);
   try { delete onlineUsersLastSeen[username]; } catch(e){}
-  req.session.destroy();
-  res.json({ success: true });
+  if (!req.session) return res.json({ success: true });
+  req.session.destroy((error) => {
+    if (error) return res.status(500).json({ message: 'A kijelentkezés nem sikerült.' });
+    res.json({ success: true });
+  });
 });
 
 
@@ -585,11 +598,13 @@ async function ensureSchema() {
         username VARCHAR(100) NOT NULL UNIQUE,
         password VARCHAR(255) NOT NULL,
         password_reset_required BOOLEAN NOT NULL DEFAULT FALSE,
+        email VARCHAR(254),
         status VARCHAR(255),
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
     await query('ALTER TABLE registered_users ADD COLUMN IF NOT EXISTS password_reset_required BOOLEAN NOT NULL DEFAULT FALSE');
+    await query('ALTER TABLE registered_users ADD COLUMN IF NOT EXISTS email VARCHAR(254)');
     await query(`
       CREATE TABLE IF NOT EXISTS roles (
         id BIGSERIAL PRIMARY KEY,
@@ -747,12 +762,12 @@ app.get('/admin/users', async (req, res) => {
     }
 
     const [rows] = await query(
-      `SELECT u.id, u.username, u.status, STRING_AGG(r.role_name, ',') AS roles
+      `SELECT u.id, u.username, u.email, u.status, STRING_AGG(r.role_name, ',') AS roles
        FROM registered_users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
        LEFT JOIN roles r ON r.id = ur.role_id
        GROUP BY u.id`);
-    const users = rows.map(r => ({ id: r.id, username: r.username, status: r.status, roles: r.roles ? r.roles.split(',') : [] }));
+    const users = rows.map(r => ({ id: r.id, username: r.username, email: r.email, status: r.status, roles: r.roles ? r.roles.split(',') : [] }));
     res.json({ users });
   } catch (err) {
     console.error('Error in /admin/users', err && err.stack ? err.stack : err);
@@ -771,10 +786,43 @@ app.post('/admin/users/:id/reset-password', async (req, res) => {
     const hashed = await bcrypt.hash(temporaryPassword, 10);
     const [, result] = await query('UPDATE registered_users SET password = ?, password_reset_required = TRUE WHERE id = ?', [hashed, userId]);
     if (!result || result.affectedRows === 0) return res.status(404).json({ message: 'A felhasználó nem található.' });
-    res.json({ success: true, temporaryPassword });
+    const [userRows] = await query('SELECT username, email FROM registered_users WHERE id = ?', [userId]);
+    const resetUser = userRows[0];
+    if (smtpTransport && resetUser.email) {
+      try {
+        await smtpTransport.sendMail({
+          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          to: resetUser.email,
+          subject: 'Cantusok Köre – ideiglenes jelszó',
+          text: `Szia ${resetUser.username}!\n\nAz adminisztrátor visszaállította a jelszavadat.\n\nIdeiglenes jelszó: ${temporaryPassword}\n\nA bejelentkezés után kötelező új jelszót beállítanod.`
+        });
+        return res.json({ success: true, emailSent: true });
+      } catch (mailError) {
+        console.error('Password reset email failed:', mailError && mailError.stack ? mailError.stack : mailError);
+        return res.json({ success: true, emailSent: false, temporaryPassword, message: 'Az e-mail küldése nem sikerült, használd az ideiglenes jelszót.' });
+      }
+    }
+    res.json({ success: true, emailSent: false, temporaryPassword, message: resetUser.email ? 'SMTP nincs beállítva.' : 'Ehhez a fiókhoz nincs e-mail cím mentve.' });
   } catch (err) {
     console.error('Error in POST /admin/users/:id/reset-password:', err && err.stack ? err.stack : err);
     res.status(500).json({ message: 'A jelszó visszaállítása nem sikerült.' });
+  }
+});
+
+app.post('/admin/users/:id/email', async (req, res) => {
+  try {
+    const username = req.session && req.session.user;
+    if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
+    if (!(await userHasRole(username, ['all-time admin']))) return res.status(403).json({ message: 'Nincs jogosultsága' });
+    const userId = parseInt(req.params.id, 10);
+    const email = String(req.body && req.body.email || '').trim().toLowerCase();
+    if (!Number.isInteger(userId) || userId < 1 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) return res.status(400).json({ message: 'Érvénytelen adat.' });
+    const [, result] = await query('UPDATE registered_users SET email = ? WHERE id = ?', [email || null, userId]);
+    if (!result || result.affectedRows === 0) return res.status(404).json({ message: 'A felhasználó nem található.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in POST /admin/users/:id/email:', err && err.stack ? err.stack : err);
+    res.status(500).json({ message: 'Az e-mail cím mentése nem sikerült.' });
   }
 });
 

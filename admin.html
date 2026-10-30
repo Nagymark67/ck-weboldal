@@ -16,13 +16,14 @@
 </head>
 <body>
   <h1>Admin felület</h1>
+  <button id="adminLogout" type="button">Kijelentkezés</button>
   <p class="small">Csak<strong> admin</strong> fiókkal elérhető.</p>
   <div id="notice"></div>
   <table>
     <thead>
-      <tr><th>ID</th><th>Felhasználónév</th><th>Státusz</th><th>Szerepek</th><th>Műveletek</th></tr>
+      <tr><th>ID</th><th>Felhasználónév</th><th>E-mail</th><th>Státusz</th><th>Szerepek</th><th>Műveletek</th></tr>
     </thead>
-    <tbody id="usersBody"><tr><td colspan="5">Betöltés...</td></tr></tbody>
+    <tbody id="usersBody"><tr><td colspan="6">Betöltés...</td></tr></tbody>
   </table>
 
 <script>
@@ -35,21 +36,31 @@
   try {
 
     const me = await fetch('/me', { credentials: 'include' });
-    if (!me.ok) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Nem vagy bejelentkezve</td></tr>'; return; }
+    if (!me.ok) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="6">Nem vagy bejelentkezve</td></tr>'; return; }
     const md = await me.json();
-    if (!md.isAllTimeAdmin) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Nincs jogosultsága ennek az oldalnak az eléréséhez.</td></tr>'; return; }
+    if (!md.isAllTimeAdmin) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="6">Nincs jogosultsága ennek az oldalnak az eléréséhez.</td></tr>'; return; }
 
     const res = await fetch('/admin/users', { credentials: 'include' });
-    if (!res.ok) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Hiba a felhasználók lekérésekor</td></tr>'; return; }
+    if (!res.ok) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="6">Hiba a felhasználók lekérésekor</td></tr>'; return; }
     const d = await res.json();
     const tbody = document.getElementById('usersBody'); tbody.innerHTML = '';
     const statuses = ['', 'Szimpatizáns','Tanítvány','Tag','Jegyző','Alapító','Cantus Praeses','Alapító'];
     d.users.forEach(u => {
       const tr = document.createElement('tr');
       const rolesText = (u.roles && u.roles.length) ? u.roles.join(', ') : '';
-      tr.innerHTML = `<td>${u.id}</td><td>${u.username}</td><td></td><td>${rolesText}</td><td></td>`;
-      const statusCell = tr.children[2];
-      const opsCell = tr.children[4];
+      tr.innerHTML = `<td>${u.id}</td><td>${u.username}</td><td></td><td></td><td>${rolesText}</td><td></td>`;
+      const emailCell = tr.children[2];
+      const statusCell = tr.children[3];
+      const opsCell = tr.children[5];
+      const emailInput = document.createElement('input');
+      emailInput.type = 'email'; emailInput.value = u.email || ''; emailInput.placeholder = 'email@example.com';
+      const emailSave = document.createElement('button'); emailSave.textContent = 'Mentés';
+      emailSave.addEventListener('click', async () => {
+        const r = await fetch('/admin/users/' + u.id + '/email', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email: emailInput.value }) });
+        const result = await r.json().catch(() => ({}));
+        showNotice(r.ok ? 'E-mail cím mentve' : (result.message || 'Hiba'), !r.ok);
+      });
+      emailCell.append(emailInput, emailSave);
       const sel = document.createElement('select');
       ['', 'Szimpatizáns','Tanítvány','Tag','Jegyző','Alapító','Cantus Praeses'].forEach(s => {
         const o = document.createElement('option'); o.value = s; o.text = s || '(nincs)';
@@ -86,15 +97,23 @@
         const r = await fetch('/admin/users/' + u.id + '/reset-password', { method: 'POST', credentials: 'include' });
         const result = await r.json().catch(() => ({}));
         if (!r.ok) { showNotice(result.message || 'Hiba a jelszó visszaállításakor', true); return; }
-        window.prompt(`Ideiglenes jelszó ${u.username} számára. Add át a felhasználónak; egyszer használható:`, result.temporaryPassword);
-        showNotice('Jelszó visszaállítva. A felhasználónak új jelszót kell beállítania.');
+        if (result.emailSent) showNotice(`Jelszó visszaállítva és elküldve erre: ${u.email}`);
+        else {
+          window.prompt(`Ideiglenes jelszó ${u.username} számára. Add át a felhasználónak; egyszer használható:`, result.temporaryPassword);
+          showNotice(result.message || 'Jelszó visszaállítva. A felhasználónak új jelszót kell beállítania.');
+        }
       });
       opsCell.appendChild(resetBtn);
 
       tbody.appendChild(tr);
     });
+    document.getElementById('adminLogout').addEventListener('click', async () => {
+      const response = await fetch('/logout', { method: 'POST', credentials: 'include' });
+      if (response.ok) window.location.href = '/login.html';
+      else showNotice('A kijelentkezés nem sikerült.', true);
+    });
   } catch (e) {
-    document.getElementById('usersBody').innerHTML = '<tr><td colspan="5">Hiba: ' + (e.message || e) + '</td></tr>';
+    document.getElementById('usersBody').innerHTML = '<tr><td colspan="6">Hiba: ' + (e.message || e) + '</td></tr>';
   }
 })();
 </script>

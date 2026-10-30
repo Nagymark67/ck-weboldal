@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `registered_users` (
   `username` VARCHAR(100) NOT NULL,
   `password` VARCHAR(255) NOT NULL,
   `password_reset_required` BOOLEAN NOT NULL DEFAULT FALSE,
+  `email` VARCHAR(254) DEFAULT NULL,
   `status` VARCHAR(255) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -46,7 +47,6 @@ CREATE TABLE IF NOT EXISTS `posts` (
   PRIMARY KEY (`id`),
   INDEX (`author_username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 
 
 

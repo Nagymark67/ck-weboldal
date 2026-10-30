@@ -3,7 +3,7 @@
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="icon" type="image/png" href="ck_cimer_szines.png"><title>Regisztráció | Cantusok Köre</title><link rel="stylesheet" href="ck_fooldal.css"></head>
 <body>
   <header class="site-header"><div class="header-inner"><a class="brand" href="index.html"><img src="ck_cimer_szines.png" alt="Cantusok Köre logó"><span>Cantusok Köre</span></a><a class="button button-light" href="index.html">Főoldal</a></div></header>
-  <main class="page-shell"><div class="form-card"><p class="eyebrow">Csatlakozz hozzánk</p><h2>Regisztráció</h2><form id="registerForm"><input type="text" id="regUsername" placeholder="Felhasználónév" autocomplete="username" required><input type="password" id="regPassword" placeholder="Jelszó" autocomplete="new-password" required><select id="regStatus" required><option value="" disabled selected>Ki vagy?</option><option value="Szimpatizáns">Szimpatizáns</option><option value="Tanítvány">Tanítvány</option><option value="Tag">Tag</option><option value="Jegyző">Jegyző</option><option value="Alapító">Alapító</option><option value="Cantus Praeses">Cantus Praeses</option></select><button type="submit">Regisztráció</button></form><p id="registerMessage" class="news-meta"></p><p>Már van fiókod? <a href="login.html">Bejelentkezés</a></p></div></main><footer>© 2026 Cantusok Köre. Minden jog fenntartva.</footer>
+  <main class="page-shell"><div class="form-card"><p class="eyebrow">Csatlakozz hozzánk</p><h2>Regisztráció</h2><form id="registerForm"><input type="text" id="regUsername" placeholder="Felhasználónév" autocomplete="username" required><input type="email" id="regEmail" placeholder="E-mail cím" autocomplete="email"><input type="password" id="regPassword" placeholder="Jelszó" autocomplete="new-password" required><select id="regStatus" required><option value="" disabled selected>Ki vagy?</option><option value="Szimpatizáns">Szimpatizáns</option><option value="Tanítvány">Tanítvány</option><option value="Tag">Tag</option><option value="Jegyző">Jegyző</option><option value="Alapító">Alapító</option><option value="Cantus Praeses">Cantus Praeses</option></select><button type="submit">Regisztráció</button></form><p id="registerMessage" class="news-meta"></p><p>Már van fiókod? <a href="login.html">Bejelentkezés</a></p></div></main><footer>© 2026 Cantusok Köre. Minden jog fenntartva.</footer>
   <script>
     const allowedFounders = ['Simon Gábor', 'Barak Antal', 'Bodnár Róbert', 'Fodor Ferenc', 'Czakó Gábor'];
     const statusSelect = document.getElementById('regStatus');
@@ -27,7 +27,7 @@
       event.preventDefault();
       const message = document.getElementById('registerMessage');
       try {
-        const response = await fetch('/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: regUsername.value, password: regPassword.value, status: statusSelect.value }) });
+        const response = await fetch('/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: regUsername.value, email: regEmail.value, password: regPassword.value, status: statusSelect.value }) });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
         message.textContent = 'Sikeres regisztráció! Átirányítás…';
