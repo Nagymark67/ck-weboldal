@@ -164,8 +164,14 @@ app.post('/register', async (req, res) => {
     await query('INSERT INTO registered_users (username, password, status) VALUES (?, ?, ?)', [username, hashed, status]);
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Adatbázis hiba!' });
+    console.error('Error in /register:', err && err.stack ? err.stack : err);
+    if (err && err.code === '23505') {
+      return res.status(409).json({ message: 'A felhasználónév már foglalt!' });
+    }
+    res.status(500).json({
+      message: 'Adatbázis hiba!',
+      error: process.env.NODE_ENV === 'production' ? undefined : String(err && err.message ? err.message : err)
+    });
   }
 });
 
