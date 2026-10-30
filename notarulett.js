@@ -1,5 +1,14 @@
 (() => {
-  const songs = window.NOTARULETT_SONGS || [];
+  const normalizeTitle = (title) => title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .toLowerCase();
+  const excludedTitles = new Set(
+    (window.NOTARULETT_EXCLUDED_TITLES || []).map(normalizeTitle)
+  );
+  const songs = (window.NOTARULETT_SONGS || [])
+    .filter((song) => !excludedTitles.has(normalizeTitle(song.title)));
   const songResult = document.getElementById('songResult');
   const spinButton = document.getElementById('spinButton');
   if (!songResult || !spinButton || !songs.length) return;
