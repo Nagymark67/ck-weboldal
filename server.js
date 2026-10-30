@@ -346,7 +346,10 @@ async function userHasRole(username, requiredRoles = []) {
 function sanitizeContent(input) {
   if (!input) return '';
   return input.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-              .replace(/on\w+\s*=\s*"[^"]*"/gi, '');
+              .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+              .replace(/<(iframe|object|embed|form)[^>]*>[\s\S]*?<\/\1>/gi, '')
+              .replace(/on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+              .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '');
 }
 
 // List recent posts (latest first)
@@ -363,9 +366,10 @@ app.get('/posts', async (req, res) => {
       ...r,
       attachments: Array.isArray(r.attachments)
         ? r.attachments
-        : (r.attachments ? JSON.parse(r.attachments) : [])
+        : (r.attachments ? (typeof r.attachments === 'string' ? JSON.parse(r.attachments) : r.attachments) : []),
+      poll: r.poll || null
     }));
-    res.json({ posts: parsed });
+    res.json({ posts: parsed, currentUser: req.session && req.session.user ? req.session.user : null });
   } catch (err) {
     console.error('Error fetching posts', err);
     res.status(500).json({ posts: [] });
@@ -382,7 +386,24 @@ app.post('/posts', upload.array('attachments', 5), async (req, res) => {
     if (!allowed) return res.status(403).json({ message: 'Nincs jogosultsága posztolni' });
     const content = req.body.content;
     const visibility = req.body.visibility || 'mindenki';
-    if (!content || content.trim().length === 0) return res.status(400).json({ message: 'Üres tartalom' });
+    let poll = null;
+    if (req.body.poll) {
+      try {
+        const submittedPoll = typeof req.body.poll === 'string' ? JSON.parse(req.body.poll) : req.body.poll;
+        const question = String(submittedPoll.question || '').trim().slice(0, 300);
+        const options = Array.isArray(submittedPoll.options)
+          ? submittedPoll.options.map(option => String(option).trim().slice(0, 120)).filter(Boolean).slice(0, 6)
+          : [];
+        if (question && options.length >= 2) {
+          poll = { question, options: options.map(text => ({ text, votes: 0 })) };
+        }
+      } catch (pollError) {
+        return res.status(400).json({ message: 'Érvénytelen szavazás' });
+      }
+    }
+    if ((!content || content.trim().length === 0) && !poll && (!req.files || req.files.length === 0)) {
+      return res.status(400).json({ message: 'Adj meg tartalmat, képet vagy szavazást' });
+    }
     const safe = sanitizeContent(content);
     const filePaths = [];
     if (req.files && req.files.length > 0) {
@@ -391,11 +412,33 @@ app.post('/posts', upload.array('attachments', 5), async (req, res) => {
         filePaths.push('/uploads/' + path.basename(f.path));
       }
     }
-    await query('INSERT INTO posts (author_username, content, visibility, attachments) VALUES (?, ?, ?, ?)', [username, safe, visibility, JSON.stringify(filePaths)]);
+    await query('INSERT INTO posts (author_username, content, visibility, attachments, poll) VALUES (?, ?, ?, ?, ?)', [username, safe, visibility, JSON.stringify(filePaths), poll ? JSON.stringify(poll) : null]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error creating post', err);
     res.status(500).json({ message: 'Hiba a poszt létrehozásakor' });
+  }
+});
+
+app.post('/posts/:id/vote', async (req, res) => {
+  const username = req.session && req.session.user;
+  if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
+  const postId = parseInt(req.params.id, 10);
+  const optionIndex = Number.parseInt(req.body.optionIndex, 10);
+  if (!postId || !Number.isInteger(optionIndex)) return res.status(400).json({ message: 'Érvénytelen szavazat' });
+  try {
+    const [rows] = await query('SELECT poll FROM posts WHERE id = ?', [postId]);
+    if (rows.length === 0) return res.status(404).json({ message: 'A poszt nem található' });
+    const poll = rows[0].poll;
+    if (!poll || !Array.isArray(poll.options) || !poll.options[optionIndex]) {
+      return res.status(400).json({ message: 'A poszt nem tartalmaz szavazást' });
+    }
+    poll.options[optionIndex].votes = Number(poll.options[optionIndex].votes || 0) + 1;
+    await query('UPDATE posts SET poll = ? WHERE id = ?', [JSON.stringify(poll), postId]);
+    res.json({ success: true, poll });
+  } catch (err) {
+    console.error('Error voting in poll', err);
+    res.status(500).json({ message: 'Hiba a szavazás mentésekor' });
   }
 });
 
@@ -531,9 +574,11 @@ async function ensureSchema() {
         visibility VARCHAR(40) NOT NULL DEFAULT 'mindenki'
           CHECK (visibility IN ('mindenki', 'tagok_es_tanitvanyok', 'csak_tagok')),
         attachments JSONB,
+        poll JSONB,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS poll JSONB');
     await query(`
       CREATE TABLE IF NOT EXISTS gallery_images (
         id BIGSERIAL PRIMARY KEY,

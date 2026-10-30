@@ -184,8 +184,10 @@
       console.warn('Could not check login state', error);
       return null;
     }
-    const photoGrid = document.querySelector('.photo-grid');
-    if (photoGrid) {
+  }
+  const userPromise = checkUser();
+  const photoGrid = document.querySelector('.photo-grid');
+  if (photoGrid) {
       fetch('/gallery', { credentials: 'include' }).then((response) => response.ok ? response.json() : { images: [] }).then((data) => {
         (data.images || []).forEach((image) => {
           const figure = document.createElement('figure');
@@ -197,7 +199,7 @@
           photoGrid.appendChild(figure);
         });
       }).catch((error) => console.warn('Could not load gallery images', error));
-      checkUser().then((user) => {
+      userPromise.then((user) => {
         const addPhotoButton = document.getElementById('addPhotoButton');
         if (!addPhotoButton || !canManageContent(user)) return;
         addPhotoButton.hidden = false;
@@ -215,9 +217,8 @@
           window.location.reload();
         });
       });
-    }
   }
-  checkUser().then((user) => {
+  userPromise.then((user) => {
     const eventButton = document.getElementById('addEventButton');
     const canManageEvents = user && (user.isAllTimeAdmin || (user.roles || []).some((role) => ['cantus_praeses', 'jegyzo'].includes(role)));
     if (eventButton && canManageEvents) eventButton.hidden = false;
@@ -237,6 +238,7 @@
   const composer = document.getElementById('composer');
   const createButton = document.getElementById('floatingCreate');
   const canCreate = canManageContent;
+  let activeUser = null;
   function renderPost(post) {
     const article = document.createElement('article');
     article.className = 'news-post';
@@ -244,15 +246,71 @@
     article.innerHTML = `<div class="news-meta"><strong>${post.author_username || 'Ismeretlen szerző'}</strong> · ${date}</div><div class="news-content">${post.content || ''}</div>`;
     (post.attachments || []).forEach((attachment) => {
       if (typeof attachment === 'string' && attachment.startsWith('/uploads/')) {
-        const link = document.createElement('a'); link.className = 'button button-outline'; link.href = attachment; link.target = '_blank'; link.textContent = 'Csatolmány megnyitása'; article.appendChild(link);
+        const image = document.createElement('img');
+        image.className = 'post-image';
+        image.src = attachment;
+        image.alt = 'A bejegyzéshez csatolt kép';
+        image.loading = 'lazy';
+        article.appendChild(image);
       }
     });
+    if (post.poll && Array.isArray(post.poll.options)) {
+      const poll = document.createElement('form');
+      poll.className = 'post-poll';
+      const question = document.createElement('strong');
+      question.textContent = post.poll.question || 'Szavazás';
+      poll.appendChild(question);
+      post.poll.options.forEach((option, index) => {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = `poll-${post.id}`;
+        input.value = index;
+        input.required = true;
+        const text = document.createElement('span');
+        text.textContent = option.text;
+        const votes = document.createElement('small');
+        votes.textContent = `${option.votes || 0} szavazat`;
+        label.append(input, text, votes);
+        poll.appendChild(label);
+      });
+      const voteButton = document.createElement('button');
+      voteButton.className = 'button button-outline';
+      voteButton.type = 'submit';
+      voteButton.textContent = 'Szavazok';
+      poll.appendChild(voteButton);
+      poll.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const selected = poll.querySelector('input:checked');
+        const response = await fetch(`/posts/${post.id}/vote`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ optionIndex: Number(selected.value) })
+        });
+        if (response.ok) loadPosts();
+      });
+      article.appendChild(poll);
+    }
+    if (activeUser && (post.author_username === activeUser.username || canManageContent(activeUser))) {
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'button button-outline post-delete';
+      deleteButton.type = 'button';
+      deleteButton.textContent = 'Poszt törlése';
+      deleteButton.addEventListener('click', async () => {
+        if (!window.confirm('Biztosan törlöd ezt a posztot?')) return;
+        const response = await fetch(`/posts/${post.id}`, { method: 'DELETE', credentials: 'include' });
+        if (response.ok) loadPosts();
+      });
+      article.appendChild(deleteButton);
+    }
     return article;
   }
   async function loadPosts() {
     try {
       const response = await fetch('/posts', { credentials: 'include' });
       const data = await response.json();
+      if (!activeUser && data.currentUser) activeUser = { username: data.currentUser, roles: [] };
       postsList.replaceChildren();
       if (!data.posts?.length) {
         postsList.innerHTML = '<p class="news-meta">Még nincsenek nyilvános hírek.</p>';
@@ -262,23 +320,66 @@
       if (feedLoading) feedLoading.textContent = 'A hírek betöltése nem sikerült.';
     }
   }
-  checkUser().then((user) => {
+  userPromise.then((user) => {
+    activeUser = user;
     if (canCreate(user) && createButton && composer) {
       createButton.style.display = 'block';
       body.classList.add('can-create-post');
       createButton.addEventListener('click', () => composer.classList.add('open'));
     }
+    loadPosts();
   });
   document.querySelectorAll('[data-close-composer]').forEach((button) => button.addEventListener('click', () => composer?.classList.remove('open')));
+  const editor = document.getElementById('composerEditor');
+  document.querySelectorAll('[data-command]').forEach((button) => button.addEventListener('click', () => {
+    editor?.focus();
+    document.execCommand(button.dataset.command, false);
+  }));
+  const pollEnabled = document.getElementById('composerPollEnabled');
+  const pollFields = document.getElementById('pollFields');
+  const pollOptions = document.getElementById('composerPollOptions');
+  const addPollOption = () => {
+    if (!pollOptions || pollOptions.children.length >= 6) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'poll-option';
+    input.maxLength = 120;
+    input.placeholder = `Válaszlehetőség ${pollOptions.children.length + 1}`;
+    pollOptions.appendChild(input);
+  };
+  pollEnabled?.addEventListener('change', () => {
+    if (pollFields) pollFields.hidden = !pollEnabled.checked;
+    if (pollEnabled.checked && pollOptions && pollOptions.children.length === 0) {
+      addPollOption();
+      addPollOption();
+    }
+  });
+  document.getElementById('addPollOption')?.addEventListener('click', addPollOption);
   document.getElementById('composerSubmit')?.addEventListener('click', async () => {
-    const content = document.getElementById('composerEditor')?.value || '';
+    const content = editor?.innerHTML || '';
+    const images = document.getElementById('composerImages');
+    const message = document.getElementById('composerMessage');
     const visibility = document.getElementById('composerVisibility')?.value || 'mindenki';
-    if (!content.trim()) return;
     const formData = new FormData();
     formData.append('content', content);
     formData.append('visibility', visibility);
+    Array.from(images?.files || []).slice(0, 5).forEach((file) => formData.append('attachments', file));
+    if (pollEnabled?.checked) {
+      formData.append('poll', JSON.stringify({
+        question: document.getElementById('composerPollQuestion')?.value || '',
+        options: Array.from(document.querySelectorAll('.poll-option')).map((input) => input.value)
+      }));
+    }
     const response = await fetch('/posts', { method: 'POST', credentials: 'include', body: formData });
-    if (response.ok) { composer?.classList.remove('open'); loadPosts(); }
+    if (response.ok) {
+      composer?.classList.remove('open');
+      if (editor) editor.innerHTML = '';
+      if (images) images.value = '';
+      if (message) message.textContent = '';
+      loadPosts();
+    } else if (message) {
+      const result = await response.json().catch(() => ({}));
+      message.textContent = result.message || 'A poszt közzététele nem sikerült.';
+    }
   });
-  loadPosts();
 })();

@@ -56,9 +56,29 @@
   <div id="composer" class="modal-backdrop" role="dialog" aria-modal="true">
     <div class="modal">
       <h2>Új hír közzététele</h2>
-      <textarea id="composerEditor" placeholder="Írd meg a hírt…"></textarea>
-      <select id="composerVisibility"><option value="mindenki">Mindenki</option><option value="tagok_es_tanitvanyok">Tagok és tanítványok</option><option value="csak_tagok">Csak tagok</option></select>
-      <div class="modal-actions"><button class="button button-outline" data-close-composer type="button">Mégse</button><button class="button" id="composerSubmit" type="button">Közzététel</button></div>
+    <div class="editor-toolbar" role="toolbar" aria-label="Szövegformázás">
+      <button type="button" data-command="bold" title="Félkövér"><strong>B</strong></button>
+      <button type="button" data-command="italic" title="Dőlt"><em>I</em></button>
+      <button type="button" data-command="underline" title="Aláhúzott"><u>U</u></button>
+    </div>
+    <div id="composerEditor" class="composer-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Írd meg a hírt…"></div>
+    <div class="composer-options">
+      <label class="file-picker">Kép hozzáadása
+        <input id="composerImages" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+      </label>
+      <select id="composerVisibility" aria-label="Láthatóság"><option value="mindenki">Mindenki</option><option value="tagok_es_tanitvanyok">Tagok és tanítványok</option><option value="csak_tagok">Csak tagok</option></select>
+    </div>
+    <section class="poll-builder" aria-label="Szavazás beállításai">
+      <label class="poll-toggle"><input id="composerPollEnabled" type="checkbox"> Szavazás hozzáadása</label>
+      <div id="pollFields" hidden>
+        <label for="composerPollQuestion">Kérdés</label>
+        <input id="composerPollQuestion" maxlength="300" placeholder="Miről szavazzunk?">
+        <div id="composerPollOptions"></div>
+        <button class="button button-outline" id="addPollOption" type="button">+ Válaszlehetőség</button>
+      </div>
+    </section>
+    <p id="composerMessage" class="composer-message" role="status" aria-live="polite"></p>
+    <div class="modal-actions"><button class="button button-outline" data-close-composer type="button">Mégse</button><button class="button" id="composerSubmit" type="button">Közzététel</button></div>
     </div>
   </div>
   <footer>© 2026 Cantusok Köre. Minden jog fenntartva.</footer>

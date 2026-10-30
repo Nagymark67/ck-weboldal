@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS `posts` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `author_username` VARCHAR(100) NOT NULL,
   `content` TEXT NOT NULL,
+  `visibility` VARCHAR(40) NOT NULL DEFAULT 'mindenki',
+  `attachments` JSON,
+  `poll` JSON,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX (`author_username`)
