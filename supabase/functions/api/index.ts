@@ -235,6 +235,19 @@ async function uploadFile(file: { originalname: string; mimetype: string; buffer
   return `${supabaseUrl}/storage/v1/object/public/uploads/${path}`;
 }
 
+async function galleryImageForClient(image: { image_url: string; [key: string]: unknown }) {
+  const marker = "/storage/v1/object/public/uploads/";
+  try {
+    const imagePath = new URL(image.image_url).pathname.split(marker)[1];
+    if (!imagePath) return image;
+    const { data, error } = await db.storage.from("uploads").createSignedUrl(decodeURIComponent(imagePath), 60 * 60);
+    if (error || !data?.signedUrl) return image;
+    return { ...image, image_url: data.signedUrl };
+  } catch {
+    return image;
+  }
+}
+
 app.post("/posts", multipart.array("attachments", 5), async (req, res) => {
   const username = await requireUser(req, res);
   if (!username) return;
@@ -295,7 +308,7 @@ app.get("/gallery", async (req, res) => {
   if (!await requireUser(req, res)) return;
   const { data, error } = await db.from("gallery_images").select("id,image_url,alt_text,created_at").eq("approved", true).order("created_at", { ascending: true });
   if (error) return res.status(500).json({ message: "A galéria betöltése nem sikerült" });
-  res.json({ images: data || [] });
+  res.json({ images: await Promise.all((data || []).map(galleryImageForClient)) });
 });
 
 app.post("/gallery", multipart.array("image", 10), async (req, res) => {
