@@ -359,6 +359,18 @@
   const userPromise = checkUser();
   const photoGrid = document.querySelector('.photo-grid');
   if (photoGrid) {
+      const defaultGalleryImages = [
+        ['cantusok-koere-01.jpg', 'A Cantusok Köre tagjai erdei kiránduláson'],
+        ['cantusok-koere-02.jpg', 'A Cantusok Köre tagjai szabadtéri programon'],
+        ['cantusok-koere-03.jpg', 'Baráti pillanat egy esti rendezvényen'],
+        ['cantusok-koere-04.jpg', 'Cantusok Köre tagjai ünnepi öltözetben'],
+        ['cantusok-koere-05.jpg', 'Közös fotó egy rendezvényen'],
+        ['cantusok-koere-06.jpg', 'A Cantusok Köre tagjai szabadtéri eseményen'],
+        ['hero.jpg', 'A Cantusok Köre tagjai közös ünnepi fotón']
+      ].map(([file, alt_text]) => ({
+        image_url: `https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/${file}`,
+        alt_text
+      }));
       Promise.all([window.ckApiFetch('/gallery'), userPromise]).then(async ([response, user]) => {
         const accessMessage = document.getElementById('photoAccessMessage');
         if (response.status === 401) {
@@ -367,8 +379,9 @@
         }
         if (!response.ok) throw new Error(`Gallery request failed: ${response.status}`);
         const data = await response.json();
-        if (accessMessage) accessMessage.textContent = data.images?.length ? '' : 'Még nincs elérhető kép.';
-        (data.images || []).forEach((image) => {
+        const images = data.images?.length ? data.images : defaultGalleryImages;
+        if (accessMessage) accessMessage.textContent = images.length ? '' : 'Még nincs elérhető kép.';
+        images.forEach((image) => {
           const figure = document.createElement('figure');
           figure.className = 'photo-card';
           const photo = document.createElement('img');

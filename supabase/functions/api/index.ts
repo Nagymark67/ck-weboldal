@@ -306,9 +306,12 @@ app.delete("/posts/:id", async (req, res) => {
 
 app.get("/gallery", async (req, res) => {
   if (!await requireUser(req, res)) return;
-  const { data, error } = await db.from("gallery_images").select("id,image_url,alt_text,created_at").eq("approved", true).order("created_at", { ascending: true });
-  if (error) return res.status(500).json({ message: "A galéria betöltése nem sikerült" });
-  res.json({ images: await Promise.all((data || []).map(galleryImageForClient)) });
+  let result = await db.from("gallery_images").select("id,image_url,alt_text,created_at").eq("approved", true).order("created_at", { ascending: true });
+  if (result.error) {
+    result = await db.from("gallery_images").select("id,image_url,alt_text,created_at").order("created_at", { ascending: true });
+  }
+  if (result.error) return res.status(500).json({ message: "A galéria betöltése nem sikerült" });
+  res.json({ images: await Promise.all((result.data || []).map(galleryImageForClient)) });
 });
 
 app.post("/gallery", multipart.array("image", 10), async (req, res) => {
