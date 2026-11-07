@@ -20,7 +20,7 @@ const smtpSecure = Deno.env.get("SMTP_SECURE") === "true";
 const smtpFrom = Deno.env.get("SMTP_FROM") || smtpUser;
 if (!supabaseUrl || !serviceKey || !sessionSecret) {
   throw new Error("PROJECT_URL (or SUPABASE_URL), SECRET_KEY (or SERVICE_KEY) and SESSION_SECRET are required.");
-}
+} 
 
 const db = createClient(supabaseUrl, serviceKey);
 const smtpTransport = smtpHost && smtpUser && smtpPass
