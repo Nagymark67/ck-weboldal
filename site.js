@@ -537,18 +537,44 @@
   const createButton = document.getElementById('floatingCreate');
   const canCreate = canManageContent;
   let activeUser = null;
+  const attachmentUrl = (attachment) => {
+    if (typeof attachment === 'string') return attachment;
+    if (attachment && typeof attachment === 'object') {
+      return attachment.url || attachment.image_url || attachment.path || '';
+    }
+    return '';
+  };
+  const attachmentList = (attachments) => {
+    if (Array.isArray(attachments)) return attachments;
+    if (typeof attachments !== 'string' || !attachments.trim()) return [];
+    try {
+      const parsed = JSON.parse(attachments);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
   function renderPost(post) {
     const article = document.createElement('article');
     article.className = 'news-post';
     const date = post.created_at ? new Date(post.created_at).toLocaleString('hu-HU') : '';
     article.innerHTML = `<div class="news-meta"><strong>${post.author_username || 'Ismeretlen szerző'}</strong> · ${date}</div><div class="news-content">${post.content || ''}</div>`;
-    (post.attachments || []).forEach((attachment) => {
-      if (typeof attachment === 'string' && attachment.startsWith('/uploads/')) {
+    attachmentList(post.attachments).forEach((attachment) => {
+      const source = attachmentUrl(attachment);
+      if (source && (source.startsWith('/uploads/') || /^https?:\/\//i.test(source))) {
         const image = document.createElement('img');
         image.className = 'post-image';
-        image.src = attachment;
         image.alt = 'A bejegyzéshez csatolt kép';
         image.loading = 'lazy';
+        image.addEventListener('error', () => {
+          image.replaceWith(Object.assign(document.createElement('p'), {
+            className: 'news-meta',
+            textContent: 'A kép nem tölthető be.'
+          }));
+        }, { once: true });
+        image.src = source.startsWith('/uploads/')
+          ? `${window.CK_API_BASE_URL}${source}`
+          : source;
         article.appendChild(image);
       }
     });

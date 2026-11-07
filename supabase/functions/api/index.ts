@@ -228,8 +228,9 @@ app.get("/posts", async (req, res) => {
 });
 
 async function uploadFile(file: { originalname: string; mimetype: string; buffer: Uint8Array }, username: string) {
-  const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "");
-  const path = `${username}/${crypto.randomUUID()}-${safeName || "upload"}`;
+  const safeUsername = username.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]/g, "_").replace(/^_+|_+$/g, "") || "user";
+  const safeName = file.originalname.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${safeUsername}/${crypto.randomUUID()}-${safeName || "upload"}`;
   const { error } = await db.storage.from("uploads").upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
   if (error) throw error;
   return `${supabaseUrl}/storage/v1/object/public/uploads/${path}`;
