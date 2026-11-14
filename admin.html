@@ -216,7 +216,10 @@
         approve.addEventListener('click', async () => {
           const response = await window.ckApiFetch('/admin/gallery/' + image.id + '/approve', { method: 'POST' });
           if (response.ok) location.reload();
-          else showNotice('A kép jóváhagyása nem sikerült.', true);
+          else {
+            const result = await response.json().catch(() => ({}));
+            showNotice(result.message || 'A kép jóváhagyása nem sikerült.', true);
+          }
         });
         const reject = document.createElement('button');
         reject.textContent = 'Elutasítás';
@@ -234,8 +237,11 @@
     const driveButton = document.getElementById('importDrivePhotos');
     const driveResponse = await window.ckApiFetch('/admin/google-drive/status');
     const driveData = await driveResponse.json().catch(() => ({}));
-    if (driveResponse.ok && driveData.configured && driveData.accessible) {
-      driveStatus.textContent = 'Beállítva. Az importált képek először moderációra kerülnek.';
+    if (driveData.full) {
+      driveStatus.textContent = 'A galéria megtelt (9/9 kép). Törölj egy képet, mielőtt új képet importálsz vagy jóváhagysz.';
+      driveButton.disabled = true;
+    } else if (driveResponse.ok && driveData.configured && driveData.accessible) {
+      driveStatus.textContent = `Beállítva. A galéria jelenleg ${driveData.galleryCount}/9 kép. Az importált képek először moderációra kerülnek.`;
     } else if (driveData.configured && driveData.message) {
       driveStatus.textContent = 'A beállítás megvan, de a Drive mappa nem érhető el: ' + driveData.message;
       driveButton.disabled = true;

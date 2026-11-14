@@ -319,28 +319,13 @@ async function galleryImageForClient(image: { image_url: string; [key: string]: 
   }
 }
 
-async function removeDriveGalleryImages() {
-  const { data: oldImages, error: selectError } = await db
+async function approvedGalleryCount() {
+  const { count, error } = await db
     .from("gallery_images")
-    .select("id,image_url")
-    .eq("source", "google_drive");
-  if (selectError) throw selectError;
-  const paths = (oldImages || []).map((image) => {
-    try {
-      return decodeURIComponent(new URL(image.image_url).pathname.split("/storage/v1/object/public/uploads/")[1] || "");
-    } catch {
-      return "";
-    }
-  }).filter(Boolean);
-  if (paths.length) {
-    const { error: storageError } = await db.storage.from("uploads").remove(paths);
-    if (storageError) throw storageError;
-  }
-  if (oldImages?.length) {
-    const { error: deleteError } = await db.from("gallery_images").delete().eq("source", "google_drive");
-    if (deleteError) throw deleteError;
-  }
-  return oldImages?.length || 0;
+    .select("id", { count: "exact", head: true })
+    .eq("approved", true);
+  if (error) throw error;
+  return count || 0;
 }
 
 app.post("/posts", multipart.array("attachments", 5), async (req, res) => {
@@ -418,6 +403,12 @@ app.post("/gallery", multipart.array("image", 10), async (req, res) => {
     const files = ((req as MultipartRequest).files || []).slice(0, 10);
     if (files.length === 0) return res.status(400).json({ message: "Kép feltöltése kötelező" });
     if (files.some((file) => !/^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype))) return res.status(400).json({ message: "Érvénytelen képformátum" });
+    if (canApprove) {
+      const currentCount = await approvedGalleryCount();
+      if (currentCount + files.length > 9) {
+        return res.status(409).json({ message: `A galéria már ${currentCount}/9 képet tartalmaz. Előbb törölj egy képet.` });
+      }
+    }
     const altText = text(req.body?.altText).trim().slice(0, 200) || "A Cantusok Köre közös fotója";
     const imageUrls = await Promise.all(files.map((file) => uploadFile(file, username)));
     const { data, error } = await db.from("gallery_images").insert(imageUrls.map((image_url) => ({ image_url, alt_text: altText, uploaded_by: username, approved: canApprove }))).select("id,image_url,alt_text,created_at,approved");
@@ -570,10 +561,19 @@ app.get("/admin/gallery/pending", async (req, res) => {
 
 app.get("/admin/google-drive/status", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
+  let galleryCount: number;
+  try {
+    galleryCount = await approvedGalleryCount();
+  } catch (error) {
+    console.error("Gallery capacity check error", error);
+    return res.status(500).json({ message: "A galéria állapotának lekérése nem sikerült." });
+  }
   const configured = Boolean(googleDriveFolderId && googleServiceAccountJson);
   if (!configured) {
     return res.json({
       configured: false,
+      galleryCount,
+      full: galleryCount >= 9,
       folderConfigured: Boolean(googleDriveFolderId),
       serviceAccountConfigured: Boolean(googleServiceAccountJson)
     });
@@ -585,6 +585,8 @@ app.get("/admin/google-drive/status", async (req, res) => {
       configured: true,
       accessible: true,
       folderName: folder.name || null,
+      galleryCount,
+      full: galleryCount >= 9,
       folderConfigured: true,
       serviceAccountConfigured: true
     });
@@ -603,11 +605,23 @@ app.post("/admin/google-drive/import", async (req, res) => {
   const requestedCount = Number.parseInt(String(req.body?.count || ""), 10);
   const count = Number.isInteger(requestedCount) ? Math.min(Math.max(requestedCount, 1), 20) : 9;
   try {
+    const currentCount = await approvedGalleryCount();
+    if (currentCount >= 9) {
+      return res.status(409).json({ message: "A galéria megtelt (9/9 kép). Előbb törölj egy képet, majd indítsd újra az importot.", full: true, galleryCount: currentCount });
+    }
     const files = await listDriveImages();
-    const candidates = files.filter((file) => file.id);
-    if (candidates.length < count) {
+    const { data: existing, error: existingError } = await db
+      .from("gallery_images")
+      .select("source_file_id")
+      .eq("source", "google_drive")
+      .not("source_file_id", "is", null);
+    if (existingError) throw existingError;
+    const existingIds = new Set((existing || []).map((row) => row.source_file_id));
+    const candidates = files.filter((file) => file.id && !existingIds.has(file.id));
+    const importCount = Math.min(count, 9 - currentCount);
+    if (candidates.length < importCount) {
       return res.status(400).json({
-        message: `A KépeCK mappában csak ${candidates.length} kép található, ezért nem lehet ${count} képet kiválasztani.`,
+        message: `A KépeCK mappában csak ${candidates.length} kép található, ezért nem lehet ${importCount} képet kiválasztani.`,
         available: candidates.length
       });
     }
@@ -615,9 +629,8 @@ app.post("/admin/google-drive/import", async (req, res) => {
       const swapIndex = Math.floor(Math.random() * (index + 1));
       [candidates[index], candidates[swapIndex]] = [candidates[swapIndex], candidates[index]];
     }
-    const removed = await removeDriveGalleryImages();
     const imported = [];
-    for (const file of candidates.slice(0, count)) {
+    for (const file of candidates.slice(0, importCount)) {
       const fileResponse = await driveFetch(`files/${encodeURIComponent(file.id!)}?alt=media&supportsAllDrives=true`);
       const bytes = new Uint8Array(await fileResponse.arrayBuffer());
       const safeName = (file.name || "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "image";
@@ -639,7 +652,7 @@ app.post("/admin/google-drive/import", async (req, res) => {
       if (insertError) throw insertError;
       imported.push(image);
     }
-    res.json({ success: true, imported, removed, available: files.length, newCandidates: candidates.length, skipped: files.length - imported.length });
+    res.json({ success: true, imported, available: files.length, newCandidates: candidates.length, skipped: files.length - imported.length, galleryCount: currentCount + imported.length });
   } catch (error) {
     console.error("Google Drive import error", error);
     res.status(500).json({ message: error instanceof Error ? error.message : "A Google Drive importálása nem sikerült." });
@@ -650,6 +663,10 @@ app.post("/admin/gallery/:id/approve", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ message: "Érvénytelen azonosító" });
+  const currentCount = await approvedGalleryCount();
+  if (currentCount >= 9) {
+    return res.status(409).json({ message: "A galéria megtelt (9/9 kép). Előbb törölj egy képet.", full: true });
+  }
   const { error } = await db.from("gallery_images").update({ approved: true }).eq("id", id);
   if (error) return res.status(500).json({ message: "A kép jóváhagyása nem sikerült." });
   res.json({ success: true });
