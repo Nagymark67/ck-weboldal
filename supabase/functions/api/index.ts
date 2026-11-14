@@ -274,6 +274,38 @@ async function driveFetch(path: string, init: RequestInit = {}) {
   return response;
 }
 
+type DriveFile = { id?: string; name?: string; mimeType?: string };
+
+async function listDriveImages() {
+  const folders = [googleDriveFolderId!];
+  const images: DriveFile[] = [];
+  const visited = new Set<string>();
+  while (folders.length) {
+    const folderId = folders.shift()!;
+    if (visited.has(folderId)) continue;
+    visited.add(folderId);
+    let pageToken = "";
+    do {
+      const params = new URLSearchParams({
+        q: `'${folderId}' in parents and trashed = false`,
+        pageSize: "1000",
+        includeItemsFromAllDrives: "true",
+        supportsAllDrives: "true",
+        fields: "nextPageToken,files(id,name,mimeType)"
+      });
+      if (pageToken) params.set("pageToken", pageToken);
+      const response = await driveFetch(`files?${params.toString()}`);
+      const data = await response.json() as { files?: DriveFile[]; nextPageToken?: string };
+      for (const file of data.files || []) {
+        if (file.id && file.mimeType === "application/vnd.google-apps.folder") folders.push(file.id);
+        else if (file.id && file.mimeType?.startsWith("image/")) images.push(file);
+      }
+      pageToken = data.nextPageToken || "";
+    } while (pageToken);
+  }
+  return images;
+}
+
 async function galleryImageForClient(image: { image_url: string; [key: string]: unknown }) {
   const marker = "/storage/v1/object/public/uploads/";
   try {
@@ -523,13 +555,11 @@ app.get("/admin/google-drive/status", async (req, res) => {
     });
   }
   try {
-    const query = encodeURIComponent(`'${googleDriveFolderId}' in parents and trashed = false and mimeType contains 'image/'`);
-    const response = await driveFetch(`files?q=${query}&pageSize=1&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id)`);
-    const data = await response.json() as { files?: Array<{ id?: string }> };
+    const images = await listDriveImages();
     res.json({
       configured: true,
       accessible: true,
-      imageCount: data.files?.length ? "at least 1" : 0,
+      imageCount: images.length,
       folderConfigured: true,
       serviceAccountConfigured: true
     });
@@ -548,9 +578,7 @@ app.post("/admin/google-drive/import", async (req, res) => {
   const requestedCount = Number.parseInt(String(req.body?.count || ""), 10);
   const count = Number.isInteger(requestedCount) ? Math.min(Math.max(requestedCount, 1), 20) : 9;
   try {
-    const query = encodeURIComponent(`'${googleDriveFolderId}' in parents and trashed = false and mimeType contains 'image/'`);
-    const response = await driveFetch(`files?q=${query}&pageSize=1000&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,mimeType)`);
-    const files = (await response.json() as { files?: Array<{ id?: string; name?: string; mimeType?: string }> }).files || [];
+    const files = await listDriveImages();
     const { data: existing, error: existingError } = await db.from("gallery_images").select("source_file_id").eq("source", "google_drive").not("source_file_id", "is", null);
     if (existingError) throw existingError;
     const existingIds = new Set((existing || []).map((row) => row.source_file_id));
