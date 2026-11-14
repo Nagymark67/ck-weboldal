@@ -531,14 +531,21 @@
   refreshOnlineUsers();
   window.setInterval(refreshOnlineUsers, 20000);
   userPromise.then((user) => {
-    // Check Daloskönyv access: Tag, Jegyző, Cantus Praeses, Alapító, all time admin
+    const isDaloskonyvPage = window.location.pathname.includes('daloskonyv.html');
+    const isNativeApp = Boolean(window.Capacitor && (window.Capacitor.isNativePlatform?.() || window.Capacitor.Plugins));
+    if (isDaloskonyvPage && !isNativeApp) {
+      window.location.replace('index.html');
+      return;
+    }
+
+    // Check Daloskönyv access in the native app only.
     const normalizeRoleText = (text) => String(text || '')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]/g, '');
 
-    const canViewDaloskonyv = Boolean(user && (
+    const canViewDaloskonyv = Boolean(isNativeApp && user && (
       user.isAllTimeAdmin ||
       (() => {
         const allowed = ['tag', 'jegyzo', 'cantuspraeses', 'alapito', 'alltimeadmin', 'admin'];
@@ -574,7 +581,7 @@
       document.getElementById('drawerDaloskonyvLink')?.remove();
     }
 
-    if (window.location.pathname.includes('daloskonyv.html') && !canViewDaloskonyv) {
+    if (isDaloskonyvPage && !canViewDaloskonyv) {
       window.location.replace('index.html');
       return; // prevent further execution on this page
     }
