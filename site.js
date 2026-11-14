@@ -624,16 +624,6 @@
   const userPromise = checkUser();
   const photoGrid = document.querySelector('.photo-grid');
   if (photoGrid) {
-      const defaultGalleryImages = [
-        { image_url: 'https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/cantusok-koere-01.jpg', alt_text: 'A Cantusok Köre tagjai erdei kiránduláson', fallback_url: 'uploads/cantusok-koere-01.jpg' },
-        { image_url: 'https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/cantusok-koere-02.jpg', alt_text: 'A Cantusok Köre tagjai szabadtéri programon', fallback_url: 'uploads/cantusok-koere-02.jpg' },
-        { image_url: 'https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/cantusok-koere-03.jpg', alt_text: 'Baráti pillanat egy esti rendezvényen', fallback_url: 'uploads/cantusok-koere-03.jpg' },
-        { image_url: 'https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/cantusok-koere-04.jpg', alt_text: 'Cantusok Köre tagjai ünnepi öltözetben', fallback_url: 'uploads/cantusok-koere-04.jpg' },
-        { image_url: 'https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/cantusok-koere-05.jpg', alt_text: 'Közös fotó egy rendezvényen', fallback_url: 'uploads/cantusok-koere-05.jpg' },
-        { image_url: 'https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/cantusok-koere-06.jpg', alt_text: 'A Cantusok Köre tagjai szabadtéri eseményen', fallback_url: 'uploads/cantusok-koere-06.jpg' },
-        { image_url: 'https://ljxoykuwidoirscbdfaf.supabase.co/storage/v1/object/public/uploads/hero.jpg', alt_text: 'A Cantusok Köre tagjai közös ünnepi fotón', fallback_url: 'uploads/hero.jpg' }
-      ];
-
       const renderGallery = (images, user) => {
         const accessMessage = document.getElementById('photoAccessMessage');
         if (accessMessage) accessMessage.textContent = images.length ? '' : 'Még nincs elérhető kép.';
@@ -646,16 +636,6 @@
           photo.src = resolvedSrc;
           photo.alt = image.alt_text || 'Cantusok Köre fotó';
           photo.loading = 'lazy';
-          photo.onerror = () => {
-            if (image.fallback_url && photo.src !== image.fallback_url) {
-              photo.src = image.fallback_url;
-            } else {
-              const filename = image.image_url.split('/').pop();
-              if (filename && !photo.src.endsWith(`uploads/${filename}`)) {
-                photo.src = `uploads/${filename}`;
-              }
-            }
-          };
           figure.appendChild(photo);
           if (canDeleteGallery(user) && image.id) {
             const deleteButton = document.createElement('button');
@@ -698,20 +678,13 @@
           }
         }
 
-        const allImages = [...defaultGalleryImages];
-        dynamicImages.forEach((img) => {
-          if (!allImages.some((existing) => existing.id && existing.id === img.id)) {
-            allImages.push(img);
-          }
-        });
-
-        renderGallery(allImages, user);
+        renderGallery(dynamicImages, user);
       }).catch((error) => {
         console.warn('Could not load gallery images', error);
         userPromise.then((user) => {
           const accessMessage = document.getElementById('photoAccessMessage');
           if (user) {
-            renderGallery(defaultGalleryImages, user);
+            renderGallery([], user);
           } else {
             if (accessMessage) accessMessage.innerHTML = 'A galéria megtekintéséhez <a href="login.html">be kell jelentkezned</a>.';
           }
