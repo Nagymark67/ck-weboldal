@@ -33,6 +33,46 @@ SESSION_SECRET=<a long random session secret>
 NODE_ENV=production
 ```
 
+### Google Drive photo imports
+
+The admin page can import a random batch of images from the existing
+`KépeCK` folder. Imported files are copied to the server's `uploads` directory
+and are **not published automatically**: an all-time admin must approve each
+image under the pending gallery section.
+
+1. In Google Cloud, enable the Google Drive API and create a service account.
+2. Share the `KépeCK` folder with the service account's e-mail address as a
+   Viewer.
+3. Copy the folder ID from its Drive URL (the text after `/folders/`).
+4. Configure these server-side environment variables:
+
+```text
+GOOGLE_DRIVE_FOLDER_ID=<KépeCK folder ID>
+GOOGLE_SERVICE_ACCOUNT_JSON=<the service-account JSON, kept secret>
+```
+
+For PowerShell, a compact single-line value can be created without committing
+the file:
+
+```powershell
+$env:GOOGLE_SERVICE_ACCOUNT_JSON = (Get-Content .\service-account.json -Raw | ConvertFrom-Json | ConvertTo-Json -Compress)
+```
+
+The admin page's **9 kép importálása** button selects files that have not
+already been imported. It never exposes the service-account credentials to the
+browser. Automatic imports on a multi-day schedule and the rule for replacing
+rejected photos should be added only after the manual import and moderation
+flow is verified.
+
+When using the deployed Supabase API, also apply
+[`supabase/migrations/20261114034000_google_drive_gallery.sql`](./supabase/migrations/20261114034000_google_drive_gallery.sql)
+and set the same two values as Supabase function secrets:
+
+```powershell
+supabase secrets set GOOGLE_DRIVE_FOLDER_ID=<KépeCK folder ID>
+supabase secrets set GOOGLE_SERVICE_ACCOUNT_JSON='<compact service-account JSON>'
+```
+
 ## Funkciók
 
 ### Backend (server.js)

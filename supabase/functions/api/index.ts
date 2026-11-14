@@ -3,6 +3,7 @@ import express from "npm:express@4.18.2";
 import bcrypt from "npm:bcryptjs@2.4.3";
 import multer from "npm:multer@1.4.5-lts.1";
 import nodemailer from "npm:nodemailer@7.0.9";
+import { SignJWT, importPKCS8 } from "npm:jose@6";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const app = express();
@@ -18,6 +19,9 @@ const smtpPass = Deno.env.get("SMTP_PASS");
 const smtpPort = Number(Deno.env.get("SMTP_PORT") || 587);
 const smtpSecure = Deno.env.get("SMTP_SECURE") === "true";
 const smtpFrom = Deno.env.get("SMTP_FROM") || smtpUser;
+const googleDriveFolderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+const googleServiceAccountJson = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON");
+let googleAccessToken: { value: string; expiresAt: number } | null = null;
 if (!supabaseUrl || !serviceKey || !sessionSecret) {
   throw new Error("PROJECT_URL (or SUPABASE_URL), SECRET_KEY (or SERVICE_KEY) and SESSION_SECRET are required.");
 }
@@ -233,6 +237,40 @@ async function uploadFile(file: { originalname: string; mimetype: string; buffer
   const { error } = await db.storage.from("uploads").upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
   if (error) throw error;
   return `${supabaseUrl}/storage/v1/object/public/uploads/${path}`;
+}
+
+async function getGoogleDriveAccessToken() {
+  if (!googleDriveFolderId || !googleServiceAccountJson) {
+    throw new Error("GOOGLE_DRIVE_FOLDER_ID and GOOGLE_SERVICE_ACCOUNT_JSON are required.");
+  }
+  if (googleAccessToken && googleAccessToken.expiresAt > Date.now() + 60_000) return googleAccessToken.value;
+  const credentials = JSON.parse(googleServiceAccountJson) as { client_email: string; private_key: string };
+  const key = await importPKCS8(credentials.private_key, "RS256");
+  const assertion = await new SignJWT({
+    scope: "https://www.googleapis.com/auth/drive.readonly",
+    aud: "https://oauth2.googleapis.com/token"
+  }).setProtectedHeader({ alg: "RS256", typ: "JWT" }).setIssuer(credentials.client_email)
+    .setIssuedAt().setExpirationTime("1h").sign(key);
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion })
+  });
+  if (!tokenResponse.ok) throw new Error(`Google token request failed (${tokenResponse.status}).`);
+  const token = await tokenResponse.json() as { access_token?: string; expires_in?: number };
+  if (!token.access_token) throw new Error("Google token response did not contain an access token.");
+  googleAccessToken = { value: token.access_token, expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000 };
+  return token.access_token;
+}
+
+async function driveFetch(path: string, init: RequestInit = {}) {
+  const token = await getGoogleDriveAccessToken();
+  const response = await fetch(`https://www.googleapis.com/drive/v3/${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) }
+  });
+  if (!response.ok) throw new Error(`Google Drive request failed (${response.status}).`);
+  return response;
 }
 
 app.post("/posts", multipart.array("attachments", 5), async (req, res) => {
@@ -465,6 +503,60 @@ app.get("/admin/gallery/pending", async (req, res) => {
   const { data, error } = await db.from("gallery_images").select("id,image_url,alt_text,uploaded_by,created_at").eq("approved", false).order("created_at", { ascending: true });
   if (error) return res.status(500).json({ message: "A függő képek lekérése nem sikerült." });
   res.json({ images: data || [] });
+});
+
+app.get("/admin/google-drive/status", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
+  res.json({
+    configured: Boolean(googleDriveFolderId && googleServiceAccountJson),
+    folderConfigured: Boolean(googleDriveFolderId),
+    serviceAccountConfigured: Boolean(googleServiceAccountJson)
+  });
+});
+
+app.post("/admin/google-drive/import", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
+  const requestedCount = Number.parseInt(String(req.body?.count || ""), 10);
+  const count = Number.isInteger(requestedCount) ? Math.min(Math.max(requestedCount, 1), 20) : 9;
+  try {
+    const query = encodeURIComponent(`'${googleDriveFolderId}' in parents and trashed = false and mimeType contains 'image/'`);
+    const response = await driveFetch(`files?q=${query}&pageSize=1000&fields=files(id,name,mimeType)`);
+    const files = (await response.json() as { files?: Array<{ id?: string; name?: string; mimeType?: string }> }).files || [];
+    const { data: existing } = await db.from("gallery_images").select("source_file_id").eq("source", "google_drive").not("source_file_id", "is", null);
+    const existingIds = new Set((existing || []).map((row) => row.source_file_id));
+    const candidates = files.filter((file) => file.id && !existingIds.has(file.id));
+    for (let index = candidates.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [candidates[index], candidates[swapIndex]] = [candidates[swapIndex], candidates[index]];
+    }
+    const imported = [];
+    for (const file of candidates.slice(0, count)) {
+      const fileResponse = await driveFetch(`files/${encodeURIComponent(file.id!)}?alt=media`);
+      const bytes = new Uint8Array(await fileResponse.arrayBuffer());
+      const safeName = (file.name || "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "image";
+      const storagePath = `google-drive/${file.id}-${safeName}`;
+      const { error: uploadError } = await db.storage.from("uploads").upload(storagePath, bytes, {
+        contentType: file.mimeType || "image/jpeg",
+        upsert: false
+      });
+      if (uploadError) throw uploadError;
+      const imageUrl = `${supabaseUrl}/storage/v1/object/public/uploads/${storagePath}`;
+      const { data: image, error: insertError } = await db.from("gallery_images").insert({
+        image_url: imageUrl,
+        alt_text: file.name || "Google Drive fotó",
+        uploaded_by: "Google Drive",
+        approved: false,
+        source: "google_drive",
+        source_file_id: file.id
+      }).select("id,image_url,alt_text,created_at").single();
+      if (insertError) throw insertError;
+      imported.push(image);
+    }
+    res.json({ success: true, imported, skipped: candidates.length - Math.min(candidates.length, count) });
+  } catch (error) {
+    console.error("Google Drive import error", error);
+    res.status(500).json({ message: error instanceof Error ? error.message : "A Google Drive importálása nem sikerült." });
+  }
 });
 
 app.post("/admin/gallery/:id/approve", async (req, res) => {

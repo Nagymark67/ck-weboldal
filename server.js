@@ -21,6 +21,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { google } = require('googleapis');
 
 
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -42,6 +43,43 @@ const galleryUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype))
 });
+
+const googleDriveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+const googleServiceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+let googleDriveClient;
+
+function getGoogleDriveClient() {
+  if (googleDriveClient) return googleDriveClient;
+  if (!googleDriveFolderId || !googleServiceAccountJson) {
+    throw new Error('GOOGLE_DRIVE_FOLDER_ID and GOOGLE_SERVICE_ACCOUNT_JSON are required for Drive imports.');
+  }
+  let credentials;
+  try {
+    credentials = JSON.parse(googleServiceAccountJson);
+  } catch (error) {
+    throw new Error(`GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: ${error.message}`);
+  }
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/drive.readonly']
+  });
+  googleDriveClient = google.drive({ version: 'v3', auth });
+  return googleDriveClient;
+}
+
+function downloadDriveFile(drive, fileId, destination) {
+  return new Promise((resolve, reject) => {
+    drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' })
+      .then(({ data }) => {
+        const output = fs.createWriteStream(destination);
+        data.on('error', reject);
+        output.on('error', reject);
+        output.on('finish', resolve);
+        data.pipe(output);
+      })
+      .catch(reject);
+  });
+}
 
 
 
@@ -218,6 +256,15 @@ const requireAllTimeAdminPage = async (req, res, next) => {
   const username = req.session && req.session.user;
   if (!username || !(await userHasRole(username, ['all-time admin']))) {
     return res.status(username ? 403 : 401).send('Nincs jogosultsága ennek az oldalnak az eléréséhez.');
+  }
+  next();
+};
+
+const requireAllTimeAdminApi = async (req, res, next) => {
+  const username = req.session && req.session.user;
+  if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
+  if (!(await userHasRole(username, ['all-time admin']))) {
+    return res.status(403).json({ message: 'Nincs jogosultsága' });
   }
   next();
 };
@@ -522,7 +569,7 @@ app.get('/gallery', async (req, res) => {
   try {
     let rows;
     try {
-      [rows] = await query('SELECT id, image_url, alt_text, created_at FROM gallery_images WHERE approved = 1 OR approved IS NULL ORDER BY created_at ASC');
+      [rows] = await query('SELECT id, image_url, alt_text, created_at FROM gallery_images WHERE approved = TRUE OR approved IS NULL ORDER BY created_at ASC');
     } catch {
       [rows] = await query('SELECT id, image_url, alt_text, created_at FROM gallery_images ORDER BY created_at ASC');
     }
@@ -548,12 +595,114 @@ app.post('/gallery', galleryUpload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Kép feltöltése kötelező' });
     const imageUrl = '/uploads/' + path.basename(req.file.path);
     const altText = String(req.body.altText || 'A Cantusok Köre közös fotója').trim().slice(0, 200);
-    await query('INSERT INTO gallery_images (image_url, alt_text, uploaded_by) VALUES (?, ?, ?)', [imageUrl, altText, username]);
+    await query('INSERT INTO gallery_images (image_url, alt_text, uploaded_by, approved, source) VALUES (?, ?, ?, FALSE, ?)', [imageUrl, altText, username, 'upload']);
     res.json({ success: true, image: { image_url: imageUrl, alt_text: altText } });
   } catch (err) {
     if (req.file) fs.unlink(req.file.path, () => {});
     console.error('Error uploading gallery image', err);
     res.status(500).json({ message: 'A kép feltöltése nem sikerült' });
+  }
+});
+
+app.get('/admin/gallery/pending', requireAllTimeAdminApi, async (req, res) => {
+  try {
+    const [rows] = await query(
+      'SELECT id, image_url, alt_text, uploaded_by, created_at, source FROM gallery_images WHERE approved = FALSE ORDER BY created_at ASC'
+    );
+    res.json({ images: rows || [] });
+  } catch (err) {
+    console.error('Error fetching pending gallery images', err);
+    res.status(500).json({ message: 'A függőben lévő képek lekérése nem sikerült.' });
+  }
+});
+
+app.post('/admin/gallery/:id/approve', requireAllTimeAdminApi, async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Érvénytelen azonosító' });
+  try {
+    const [rows] = await query('UPDATE gallery_images SET approved = TRUE WHERE id = ? RETURNING id', [id]);
+    if (!rows.length) return res.status(404).json({ message: 'A kép nem található' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error approving gallery image', err);
+    res.status(500).json({ message: 'A kép jóváhagyása nem sikerült.' });
+  }
+});
+
+app.delete('/admin/gallery/:id', requireAllTimeAdminApi, async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Érvénytelen azonosító' });
+  try {
+    const [rows] = await query('SELECT image_url FROM gallery_images WHERE id = ?', [id]);
+    if (!rows.length) return res.status(404).json({ message: 'A kép nem található' });
+    await query('DELETE FROM gallery_images WHERE id = ?', [id]);
+    const imageUrl = String(rows[0].image_url || '');
+    if (imageUrl.startsWith('/uploads/')) {
+      const localPath = path.join(uploadsDir, path.basename(imageUrl));
+      fs.unlink(localPath, (error) => {
+        if (error && error.code !== 'ENOENT') console.error('Error deleting gallery file', error);
+      });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting gallery image', err);
+    res.status(500).json({ message: 'A kép elutasítása nem sikerült.' });
+  }
+});
+
+app.get('/admin/google-drive/status', requireAllTimeAdminApi, async (req, res) => {
+  res.json({
+    configured: Boolean(googleDriveFolderId && googleServiceAccountJson),
+    folderConfigured: Boolean(googleDriveFolderId),
+    serviceAccountConfigured: Boolean(googleServiceAccountJson)
+  });
+});
+
+app.post('/admin/google-drive/import', requireAllTimeAdminApi, async (req, res) => {
+  const requestedCount = Number.parseInt(req.body && req.body.count, 10);
+  const count = Number.isInteger(requestedCount) ? Math.min(Math.max(requestedCount, 1), 20) : 9;
+  let drive;
+  try {
+    drive = getGoogleDriveClient();
+    const [existingRows] = await query(
+      "SELECT source_file_id FROM gallery_images WHERE source = 'google_drive' AND source_file_id IS NOT NULL"
+    );
+    const existingIds = new Set(existingRows.map((row) => row.source_file_id));
+    const response = await drive.files.list({
+      q: `'${googleDriveFolderId}' in parents and trashed = false and mimeType contains 'image/'`,
+      fields: 'files(id,name,mimeType)',
+      pageSize: 1000,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    });
+    const candidates = (response.data.files || []).filter((file) => file.id && !existingIds.has(file.id));
+    for (let index = candidates.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [candidates[index], candidates[swapIndex]] = [candidates[swapIndex], candidates[index]];
+    }
+    const selected = candidates.slice(0, count);
+    const imported = [];
+    for (const file of selected) {
+      const safeName = String(file.name || 'drive-image').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+      const localName = `drive-${file.id}-${safeName || 'image'}`;
+      const localPath = path.join(uploadsDir, localName);
+      try {
+        await downloadDriveFile(drive, file.id, localPath);
+        const imageUrl = `/uploads/${localName}`;
+        const [inserted] = await query(
+          'INSERT INTO gallery_images (image_url, alt_text, uploaded_by, approved, source, source_file_id) VALUES (?, ?, ?, FALSE, ?, ?) RETURNING id',
+          [imageUrl, file.name || 'Google Drive fotó', 'Google Drive', 'google_drive', file.id]
+        );
+        imported.push({ id: inserted[0].id, name: file.name, image_url: imageUrl });
+      } catch (error) {
+        fs.unlink(localPath, () => {});
+        throw new Error(`A Drive-kép importálása sikertelen (${file.name || file.id}): ${error.message}`);
+      }
+    }
+    res.json({ success: true, imported, skipped: candidates.length - selected.length });
+  } catch (err) {
+    console.error('Error importing Google Drive images', err);
+    res.status(500).json({ message: err.message || 'A Google Drive képek importálása nem sikerült.' });
   }
 });
 
@@ -652,9 +801,16 @@ async function ensureSchema() {
         image_url TEXT NOT NULL,
         alt_text VARCHAR(200) NOT NULL DEFAULT 'A Cantusok Köre közös fotója',
         uploaded_by VARCHAR(100) NOT NULL,
+        approved BOOLEAN NOT NULL DEFAULT TRUE,
+        source VARCHAR(40) NOT NULL DEFAULT 'upload',
+        source_file_id VARCHAR(255),
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await query('ALTER TABLE gallery_images ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE');
+    await query("ALTER TABLE gallery_images ADD COLUMN IF NOT EXISTS source VARCHAR(40) NOT NULL DEFAULT 'upload'");
+    await query('ALTER TABLE gallery_images ADD COLUMN IF NOT EXISTS source_file_id VARCHAR(255)');
+    await query('CREATE UNIQUE INDEX IF NOT EXISTS gallery_images_source_file_idx ON gallery_images (source, source_file_id) WHERE source_file_id IS NOT NULL');
     await query('CREATE INDEX IF NOT EXISTS posts_author_username_idx ON posts (author_username)');
   } catch (err) {
     console.error('Error ensuring schema', err);

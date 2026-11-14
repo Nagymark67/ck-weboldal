@@ -77,6 +77,13 @@
         <a class="button button-outline" href="photos.html" style="font-size:0.9rem;">Élő galéria megtekintése &rarr;</a>
       </div>
       <div id="pendingGallery" style="margin-top:16px;"><p>Betöltés...</p></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:32px;">
+        <div>
+          <h2 style="margin:0;">Google Drive – KépeCK</h2>
+          <p id="driveStatus" class="small">Beállítás ellenőrzése…</p>
+        </div>
+        <button id="importDrivePhotos" class="button" type="button">9 kép importálása</button>
+      </div>
       </section>
     </div>
   </main>
@@ -206,6 +213,34 @@
         pendingGallery.appendChild(card);
       });
     }
+
+    const driveStatus = document.getElementById('driveStatus');
+    const driveButton = document.getElementById('importDrivePhotos');
+    const driveResponse = await window.ckApiFetch('/admin/google-drive/status');
+    const driveData = driveResponse.ok ? await driveResponse.json() : {};
+    if (driveData.configured) {
+      driveStatus.textContent = 'Beállítva. Az importált képek először moderációra kerülnek.';
+    } else {
+      driveStatus.textContent = 'Nincs beállítva: a szerveren add meg a Drive mappaazonosítót és a szolgáltatásfiók JSON-ját.';
+      driveButton.disabled = true;
+    }
+    driveButton.addEventListener('click', async () => {
+      driveButton.disabled = true;
+      driveStatus.textContent = 'Importálás folyamatban…';
+      const response = await window.ckApiFetch('/admin/google-drive/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: 9 })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        driveStatus.textContent = result.message || 'A Google Drive importálása nem sikerült.';
+        driveButton.disabled = false;
+        return;
+      }
+      driveStatus.textContent = `${result.imported.length} új kép importálva; most jóvá kell hagyni őket.`;
+      location.reload();
+    });
   } catch (e) {
     document.getElementById('usersBody').innerHTML = '<tr><td colspan="6">Hiba: ' + (e.message || e) + '</td></tr>';
   }
