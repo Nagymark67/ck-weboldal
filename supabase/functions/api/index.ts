@@ -555,11 +555,12 @@ app.get("/admin/google-drive/status", async (req, res) => {
     });
   }
   try {
-    const images = await listDriveImages();
+    const response = await driveFetch(`files/${encodeURIComponent(googleDriveFolderId!)}?supportsAllDrives=true&fields=id,name,mimeType`);
+    const folder = await response.json() as { id?: string; name?: string; mimeType?: string };
     res.json({
       configured: true,
       accessible: true,
-      imageCount: images.length,
+      folderName: folder.name || null,
       folderConfigured: true,
       serviceAccountConfigured: true
     });

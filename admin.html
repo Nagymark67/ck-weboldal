@@ -246,22 +246,26 @@
     driveButton.addEventListener('click', async () => {
       driveButton.disabled = true;
       driveStatus.textContent = 'Importálás folyamatban…';
-      const response = await window.ckApiFetch('/admin/google-drive/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 9 })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        driveStatus.textContent = result.message || 'A Google Drive importálása nem sikerült.';
+      try {
+        const response = await window.ckApiFetch('/admin/google-drive/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count: 9 })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          driveStatus.textContent = result.message || 'A Google Drive importálása nem sikerült.';
+          return;
+        }
+        driveStatus.textContent = result.imported.length
+          ? `${result.imported.length} új kép importálva; most jóvá kell hagyni őket.`
+          : `Nem találtam új képet. A mappában ${result.available} kép van, ebből ${result.newCandidates} még nincs importálva.`;
+        if (result.imported.length) location.reload();
+      } catch (error) {
+        driveStatus.textContent = `Az importálás nem indítható el: ${error.message || error}`;
+      } finally {
         driveButton.disabled = false;
-        return;
       }
-      driveStatus.textContent = result.imported.length
-        ? `${result.imported.length} új kép importálva; most jóvá kell hagyni őket.`
-        : `Nem találtam új képet. A mappában ${result.available} kép van, ebből ${result.newCandidates} még nincs importálva.`;
-      driveButton.disabled = false;
-      if (result.imported.length) location.reload();
     });
   } catch (e) {
     document.getElementById('usersBody').innerHTML = '<tr><td colspan="6">Hiba: ' + (e.message || e) + '</td></tr>';
