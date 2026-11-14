@@ -514,11 +514,33 @@ app.get("/admin/gallery/pending", async (req, res) => {
 
 app.get("/admin/google-drive/status", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
-  res.json({
-    configured: Boolean(googleDriveFolderId && googleServiceAccountJson),
-    folderConfigured: Boolean(googleDriveFolderId),
-    serviceAccountConfigured: Boolean(googleServiceAccountJson)
-  });
+  const configured = Boolean(googleDriveFolderId && googleServiceAccountJson);
+  if (!configured) {
+    return res.json({
+      configured: false,
+      folderConfigured: Boolean(googleDriveFolderId),
+      serviceAccountConfigured: Boolean(googleServiceAccountJson)
+    });
+  }
+  try {
+    const query = encodeURIComponent(`'${googleDriveFolderId}' in parents and trashed = false and mimeType contains 'image/'`);
+    const response = await driveFetch(`files?q=${query}&pageSize=1&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id)`);
+    const data = await response.json() as { files?: Array<{ id?: string }> };
+    res.json({
+      configured: true,
+      accessible: true,
+      imageCount: data.files?.length ? "at least 1" : 0,
+      folderConfigured: true,
+      serviceAccountConfigured: true
+    });
+  } catch (error) {
+    console.error("Google Drive status error", error);
+    res.status(502).json({
+      configured: true,
+      accessible: false,
+      message: error instanceof Error ? error.message : "A Google Drive mappa nem érhető el."
+    });
+  }
 });
 
 app.post("/admin/google-drive/import", async (req, res) => {
@@ -527,9 +549,10 @@ app.post("/admin/google-drive/import", async (req, res) => {
   const count = Number.isInteger(requestedCount) ? Math.min(Math.max(requestedCount, 1), 20) : 9;
   try {
     const query = encodeURIComponent(`'${googleDriveFolderId}' in parents and trashed = false and mimeType contains 'image/'`);
-    const response = await driveFetch(`files?q=${query}&pageSize=1000&fields=files(id,name,mimeType)`);
+    const response = await driveFetch(`files?q=${query}&pageSize=1000&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,mimeType)`);
     const files = (await response.json() as { files?: Array<{ id?: string; name?: string; mimeType?: string }> }).files || [];
-    const { data: existing } = await db.from("gallery_images").select("source_file_id").eq("source", "google_drive").not("source_file_id", "is", null);
+    const { data: existing, error: existingError } = await db.from("gallery_images").select("source_file_id").eq("source", "google_drive").not("source_file_id", "is", null);
+    if (existingError) throw existingError;
     const existingIds = new Set((existing || []).map((row) => row.source_file_id));
     const candidates = files.filter((file) => file.id && !existingIds.has(file.id));
     for (let index = candidates.length - 1; index > 0; index -= 1) {
@@ -538,7 +561,7 @@ app.post("/admin/google-drive/import", async (req, res) => {
     }
     const imported = [];
     for (const file of candidates.slice(0, count)) {
-      const fileResponse = await driveFetch(`files/${encodeURIComponent(file.id!)}?alt=media`);
+      const fileResponse = await driveFetch(`files/${encodeURIComponent(file.id!)}?alt=media&supportsAllDrives=true`);
       const bytes = new Uint8Array(await fileResponse.arrayBuffer());
       const safeName = (file.name || "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "image";
       const storagePath = `google-drive/${file.id}-${safeName}`;
@@ -559,7 +582,7 @@ app.post("/admin/google-drive/import", async (req, res) => {
       if (insertError) throw insertError;
       imported.push(image);
     }
-    res.json({ success: true, imported, skipped: candidates.length - Math.min(candidates.length, count) });
+    res.json({ success: true, imported, available: files.length, newCandidates: candidates.length, skipped: files.length - imported.length });
   } catch (error) {
     console.error("Google Drive import error", error);
     res.status(500).json({ message: error instanceof Error ? error.message : "A Google Drive importálása nem sikerült." });

@@ -233,9 +233,12 @@
     const driveStatus = document.getElementById('driveStatus');
     const driveButton = document.getElementById('importDrivePhotos');
     const driveResponse = await window.ckApiFetch('/admin/google-drive/status');
-    const driveData = driveResponse.ok ? await driveResponse.json() : {};
-    if (driveData.configured) {
+    const driveData = await driveResponse.json().catch(() => ({}));
+    if (driveResponse.ok && driveData.configured && driveData.accessible) {
       driveStatus.textContent = 'Beállítva. Az importált képek először moderációra kerülnek.';
+    } else if (driveData.configured && driveData.message) {
+      driveStatus.textContent = 'A beállítás megvan, de a Drive mappa nem érhető el: ' + driveData.message;
+      driveButton.disabled = true;
     } else {
       driveStatus.textContent = 'Nincs beállítva: a szerveren add meg a Drive mappaazonosítót és a szolgáltatásfiók JSON-ját.';
       driveButton.disabled = true;
@@ -254,8 +257,11 @@
         driveButton.disabled = false;
         return;
       }
-      driveStatus.textContent = `${result.imported.length} új kép importálva; most jóvá kell hagyni őket.`;
-      location.reload();
+      driveStatus.textContent = result.imported.length
+        ? `${result.imported.length} új kép importálva; most jóvá kell hagyni őket.`
+        : `Nem találtam új képet. A mappában ${result.available} kép van, ebből ${result.newCandidates} még nincs importálva.`;
+      driveButton.disabled = false;
+      if (result.imported.length) location.reload();
     });
   } catch (e) {
     document.getElementById('usersBody').innerHTML = '<tr><td colspan="6">Hiba: ' + (e.message || e) + '</td></tr>';
