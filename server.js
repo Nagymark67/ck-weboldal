@@ -21,7 +21,88 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { google } = require('googleapis');
+const admin = require('firebase-admin');
+
+let firebaseInitialized = false;
+try {
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || path.join(__dirname, 'firebase-service-account.json');
+  if (fs.existsSync(serviceAccountPath)) {
+    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    firebaseInitialized = true;
+    console.log('Firebase Admin SDK initialized successfully for project:', serviceAccount.project_id);
+  } else {
+    console.warn('Firebase service account file not found at:', serviceAccountPath);
+  }
+} catch (fbErr) {
+  console.warn('Could not initialize Firebase Admin SDK:', fbErr.message);
+}
+
+async function sendPushNotificationToAll({ title, body, data = {} }) {
+  if (!firebaseInitialized) {
+    console.log('[PUSH SKIP] Firebase not initialized');
+    return { successCount: 0, failureCount: 0 };
+  }
+  try {
+    const [rows] = await query('SELECT DISTINCT token FROM push_tokens');
+    if (!rows || rows.length === 0) {
+      console.log('[PUSH] No registered push tokens found');
+      return { successCount: 0, failureCount: 0 };
+    }
+    const tokens = rows.map(r => r.token).filter(Boolean);
+    console.log(`[PUSH] Sending message to ${tokens.length} device(s)...`);
+
+    const message = {
+      notification: {
+        title: String(title),
+        body: String(body)
+      },
+      data: Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, String(v)])
+      ),
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'cantusok_push_channel',
+          icon: 'ic_launcher'
+        }
+      },
+      tokens
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(message);
+    console.log(`[PUSH RESULT] Success: ${response.successCount}, Failed: ${response.failureCount}`);
+
+    // Clean up expired or unregistered tokens
+    if (response.failureCount > 0) {
+      const tokensToRemove = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          const errCode = resp.error && resp.error.code;
+          if (errCode === 'messaging/invalid-registration-token' || errCode === 'messaging/registration-token-not-registered') {
+            tokensToRemove.push(tokens[idx]);
+          }
+        }
+      });
+      if (tokensToRemove.length > 0) {
+        for (const badToken of tokensToRemove) {
+          try {
+            await query('DELETE FROM push_tokens WHERE token = ?', [badToken]);
+          } catch (delErr) {
+            console.warn('Failed removing bad push token:', delErr.message);
+          }
+        }
+      }
+    }
+    return { successCount: response.successCount, failureCount: response.failureCount };
+  } catch (err) {
+    console.error('Error in sendPushNotificationToAll:', err);
+    return { successCount: 0, failureCount: 0 };
+  }
+}
 
 
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -43,43 +124,6 @@ const galleryUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype))
 });
-
-const googleDriveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-const googleServiceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-let googleDriveClient;
-
-function getGoogleDriveClient() {
-  if (googleDriveClient) return googleDriveClient;
-  if (!googleDriveFolderId || !googleServiceAccountJson) {
-    throw new Error('GOOGLE_DRIVE_FOLDER_ID and GOOGLE_SERVICE_ACCOUNT_JSON are required for Drive imports.');
-  }
-  let credentials;
-  try {
-    credentials = JSON.parse(googleServiceAccountJson);
-  } catch (error) {
-    throw new Error(`GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: ${error.message}`);
-  }
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/drive.readonly']
-  });
-  googleDriveClient = google.drive({ version: 'v3', auth });
-  return googleDriveClient;
-}
-
-function downloadDriveFile(drive, fileId, destination) {
-  return new Promise((resolve, reject) => {
-    drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' })
-      .then(({ data }) => {
-        const output = fs.createWriteStream(destination);
-        data.on('error', reject);
-        output.on('error', reject);
-        output.on('finish', resolve);
-        data.pipe(output);
-      })
-      .catch(reject);
-  });
-}
 
 
 
@@ -260,15 +304,6 @@ const requireAllTimeAdminPage = async (req, res, next) => {
   next();
 };
 
-const requireAllTimeAdminApi = async (req, res, next) => {
-  const username = req.session && req.session.user;
-  if (!username) return res.status(401).json({ message: 'Nincs bejelentkezve' });
-  if (!(await userHasRole(username, ['all-time admin']))) {
-    return res.status(403).json({ message: 'Nincs jogosultsága' });
-  }
-  next();
-};
-
 app.get(['/admin', '/admin.html'], requireAllTimeAdminPage, (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
@@ -382,6 +417,40 @@ app.post('/online-leave', (req, res) => {
   }
 });
 
+app.post('/push/register-token', async (req, res) => {
+  const { token, platform } = req.body || {};
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ message: 'Missing token' });
+  }
+  const username = (req.session && req.session.user) || null;
+  try {
+    await query(`
+      INSERT INTO push_tokens (token, username, platform, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT (token) DO UPDATE SET
+        username = EXCLUDED.username,
+        platform = EXCLUDED.platform,
+        updated_at = CURRENT_TIMESTAMP
+    `, [token, username, platform || 'android']);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error registering push token', err);
+    res.status(500).json({ message: 'DB error registering token' });
+  }
+});
+
+app.post('/push/unregister-token', async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ message: 'Missing token' });
+  try {
+    await query('DELETE FROM push_tokens WHERE token = ?', [token]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error unregistering push token', err);
+    res.status(500).json({ message: 'DB error' });
+  }
+});
+
 app.get('/me', (req, res) => {
     if (req.session && req.session.user) {
         
@@ -442,14 +511,97 @@ async function userHasRole(username, requiredRoles = []) {
 }
 
 
-function sanitizeContent(input) {
-  if (!input) return '';
-  return input.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-              .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
-              .replace(/<(iframe|object|embed|form)[^>]*>[\s\S]*?<\/\1>/gi, '')
-              .replace(/on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-              .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '');
-}
+let inMemoryEvents = [];
+
+app.get('/events', async (req, res) => {
+  try {
+    const [rows] = await query('SELECT * FROM calendar_events ORDER BY start_date ASC');
+    const formatted = (rows || []).map((ev) => ({
+      id: ev.id,
+      title: ev.title,
+      location: ev.location,
+      date: ev.start_date,
+      endDate: ev.end_date,
+      details: ev.description,
+      link: ev.link,
+      createdBy: ev.created_by
+    }));
+    return res.json({ events: formatted });
+  } catch (err) {
+    // If table doesn't exist, return inMemoryEvents
+    return res.json({ events: inMemoryEvents });
+  }
+});
+
+app.post('/events', async (req, res) => {
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({ message: 'Bejelentkezés szükséges' });
+  }
+  const username = req.session.user.username;
+  const canManage = (await userHasRole(username, ['cantus_praeses', 'jegyzo'])) || req.session.user.isAllTimeAdmin;
+  if (!canManage) {
+    return res.status(403).json({ message: 'Nincs jogosultsága eseményt létrehozni' });
+  }
+
+  const { title, location, date, startDate, endDate, details, description, link, id } = req.body || {};
+  const dateStr = date || startDate;
+  if (!title || !location || !dateStr) {
+    return res.status(400).json({ message: 'A cím, helyszín és kezdési idő megadása kötelező.' });
+  }
+
+  const start = new Date(dateStr);
+  const end = endDate ? new Date(endDate) : new Date(start.getTime() + 3 * 60 * 60 * 1000);
+  const eventId = id || `event-${Date.now()}`;
+  const record = {
+    id: eventId,
+    title: String(title).slice(0, 255),
+    location: String(location).slice(0, 255),
+    date: start.toISOString(),
+    endDate: end.toISOString(),
+    details: details || description ? String(details || description).slice(0, 3000) : null,
+    link: link ? String(link).slice(0, 500) : null,
+    createdBy: username
+  };
+
+  try {
+    await query(
+      'INSERT INTO calendar_events (id, title, location, start_date, end_date, description, link, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [record.id, record.title, record.location, record.date, record.endDate, record.details, record.link, record.createdBy]
+    );
+  } catch (dbErr) {
+    inMemoryEvents.push(record);
+  }
+
+  try {
+    const timeStr = start.toLocaleString('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    sendFcmPushToAll(
+      `Új esemény: ${record.title}`,
+      `${timeStr} · ${record.location}`,
+      { type: 'new_event', eventId: record.id }
+    ).catch(() => {});
+  } catch (pushErr) {}
+
+  res.json({ success: true, event: record });
+});
+
+app.delete('/events/:id', async (req, res) => {
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({ message: 'Bejelentkezés szükséges' });
+  }
+  const username = req.session.user.username;
+  const canManage = (await userHasRole(username, ['cantus_praeses', 'jegyzo'])) || req.session.user.isAllTimeAdmin;
+  if (!canManage) {
+    return res.status(403).json({ message: 'Nincs jogosultsága eseményt törölni' });
+  }
+
+  const { id } = req.params;
+  try {
+    await query('DELETE FROM calendar_events WHERE id = ?', [id]);
+  } catch (dbErr) {
+    inMemoryEvents = inMemoryEvents.filter((ev) => ev.id !== id);
+  }
+  res.json({ success: true });
+});
 
 
 app.get('/posts', async (req, res) => {
@@ -512,6 +664,19 @@ app.post('/posts', upload.array('attachments', 5), async (req, res) => {
       }
     }
     await query('INSERT INTO posts (author_username, content, visibility, attachments, poll) VALUES (?, ?, ?, ?, ?)', [username, safe, visibility, JSON.stringify(filePaths), poll ? JSON.stringify(poll) : null]);
+
+    // Broadcast push notification for new post
+    try {
+      const snippet = safe ? safe.replace(/<[^>]+>/g, '').trim().slice(0, 100) : 'Új bejegyzés jelent meg!';
+      sendPushNotificationToAll({
+        title: `Új bejegyzés: ${username}`,
+        body: snippet || 'Új bejegyzés jelent meg a Cantusok Köre oldalán.',
+        data: { type: 'new_post' }
+      }).catch(err => console.warn('Post push send failed:', err));
+    } catch (pushErr) {
+      console.warn('Post push notification failed:', pushErr);
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error('Error creating post', err);
@@ -569,7 +734,7 @@ app.get('/gallery', async (req, res) => {
   try {
     let rows;
     try {
-      [rows] = await query('SELECT id, image_url, alt_text, created_at FROM gallery_images WHERE approved = TRUE OR approved IS NULL ORDER BY created_at ASC');
+      [rows] = await query('SELECT id, image_url, alt_text, created_at FROM gallery_images WHERE approved = 1 OR approved IS NULL ORDER BY created_at ASC');
     } catch {
       [rows] = await query('SELECT id, image_url, alt_text, created_at FROM gallery_images ORDER BY created_at ASC');
     }
@@ -595,114 +760,12 @@ app.post('/gallery', galleryUpload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Kép feltöltése kötelező' });
     const imageUrl = '/uploads/' + path.basename(req.file.path);
     const altText = String(req.body.altText || 'A Cantusok Köre közös fotója').trim().slice(0, 200);
-    await query('INSERT INTO gallery_images (image_url, alt_text, uploaded_by, approved, source) VALUES (?, ?, ?, FALSE, ?)', [imageUrl, altText, username, 'upload']);
+    await query('INSERT INTO gallery_images (image_url, alt_text, uploaded_by) VALUES (?, ?, ?)', [imageUrl, altText, username]);
     res.json({ success: true, image: { image_url: imageUrl, alt_text: altText } });
   } catch (err) {
     if (req.file) fs.unlink(req.file.path, () => {});
     console.error('Error uploading gallery image', err);
     res.status(500).json({ message: 'A kép feltöltése nem sikerült' });
-  }
-});
-
-app.get('/admin/gallery/pending', requireAllTimeAdminApi, async (req, res) => {
-  try {
-    const [rows] = await query(
-      'SELECT id, image_url, alt_text, uploaded_by, created_at, source FROM gallery_images WHERE approved = FALSE ORDER BY created_at ASC'
-    );
-    res.json({ images: rows || [] });
-  } catch (err) {
-    console.error('Error fetching pending gallery images', err);
-    res.status(500).json({ message: 'A függőben lévő képek lekérése nem sikerült.' });
-  }
-});
-
-app.post('/admin/gallery/:id/approve', requireAllTimeAdminApi, async (req, res) => {
-  const id = Number.parseInt(req.params.id, 10);
-  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Érvénytelen azonosító' });
-  try {
-    const [rows] = await query('UPDATE gallery_images SET approved = TRUE WHERE id = ? RETURNING id', [id]);
-    if (!rows.length) return res.status(404).json({ message: 'A kép nem található' });
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Error approving gallery image', err);
-    res.status(500).json({ message: 'A kép jóváhagyása nem sikerült.' });
-  }
-});
-
-app.delete('/admin/gallery/:id', requireAllTimeAdminApi, async (req, res) => {
-  const id = Number.parseInt(req.params.id, 10);
-  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Érvénytelen azonosító' });
-  try {
-    const [rows] = await query('SELECT image_url FROM gallery_images WHERE id = ?', [id]);
-    if (!rows.length) return res.status(404).json({ message: 'A kép nem található' });
-    await query('DELETE FROM gallery_images WHERE id = ?', [id]);
-    const imageUrl = String(rows[0].image_url || '');
-    if (imageUrl.startsWith('/uploads/')) {
-      const localPath = path.join(uploadsDir, path.basename(imageUrl));
-      fs.unlink(localPath, (error) => {
-        if (error && error.code !== 'ENOENT') console.error('Error deleting gallery file', error);
-      });
-    }
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Error deleting gallery image', err);
-    res.status(500).json({ message: 'A kép elutasítása nem sikerült.' });
-  }
-});
-
-app.get('/admin/google-drive/status', requireAllTimeAdminApi, async (req, res) => {
-  res.json({
-    configured: Boolean(googleDriveFolderId && googleServiceAccountJson),
-    folderConfigured: Boolean(googleDriveFolderId),
-    serviceAccountConfigured: Boolean(googleServiceAccountJson)
-  });
-});
-
-app.post('/admin/google-drive/import', requireAllTimeAdminApi, async (req, res) => {
-  const requestedCount = Number.parseInt(req.body && req.body.count, 10);
-  const count = Number.isInteger(requestedCount) ? Math.min(Math.max(requestedCount, 1), 20) : 9;
-  let drive;
-  try {
-    drive = getGoogleDriveClient();
-    const [existingRows] = await query(
-      "SELECT source_file_id FROM gallery_images WHERE source = 'google_drive' AND source_file_id IS NOT NULL"
-    );
-    const existingIds = new Set(existingRows.map((row) => row.source_file_id));
-    const response = await drive.files.list({
-      q: `'${googleDriveFolderId}' in parents and trashed = false and mimeType contains 'image/'`,
-      fields: 'files(id,name,mimeType)',
-      pageSize: 1000,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true
-    });
-    const candidates = (response.data.files || []).filter((file) => file.id && !existingIds.has(file.id));
-    for (let index = candidates.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [candidates[index], candidates[swapIndex]] = [candidates[swapIndex], candidates[index]];
-    }
-    const selected = candidates.slice(0, count);
-    const imported = [];
-    for (const file of selected) {
-      const safeName = String(file.name || 'drive-image').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
-      const localName = `drive-${file.id}-${safeName || 'image'}`;
-      const localPath = path.join(uploadsDir, localName);
-      try {
-        await downloadDriveFile(drive, file.id, localPath);
-        const imageUrl = `/uploads/${localName}`;
-        const [inserted] = await query(
-          'INSERT INTO gallery_images (image_url, alt_text, uploaded_by, approved, source, source_file_id) VALUES (?, ?, ?, FALSE, ?, ?) RETURNING id',
-          [imageUrl, file.name || 'Google Drive fotó', 'Google Drive', 'google_drive', file.id]
-        );
-        imported.push({ id: inserted[0].id, name: file.name, image_url: imageUrl });
-      } catch (error) {
-        fs.unlink(localPath, () => {});
-        throw new Error(`A Drive-kép importálása sikertelen (${file.name || file.id}): ${error.message}`);
-      }
-    }
-    res.json({ success: true, imported, skipped: candidates.length - selected.length });
-  } catch (err) {
-    console.error('Error importing Google Drive images', err);
-    res.status(500).json({ message: err.message || 'A Google Drive képek importálása nem sikerült.' });
   }
 });
 
@@ -801,16 +864,23 @@ async function ensureSchema() {
         image_url TEXT NOT NULL,
         alt_text VARCHAR(200) NOT NULL DEFAULT 'A Cantusok Köre közös fotója',
         uploaded_by VARCHAR(100) NOT NULL,
-        approved BOOLEAN NOT NULL DEFAULT TRUE,
-        source VARCHAR(40) NOT NULL DEFAULT 'upload',
-        source_file_id VARCHAR(255),
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await query('ALTER TABLE gallery_images ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE');
-    await query("ALTER TABLE gallery_images ADD COLUMN IF NOT EXISTS source VARCHAR(40) NOT NULL DEFAULT 'upload'");
-    await query('ALTER TABLE gallery_images ADD COLUMN IF NOT EXISTS source_file_id VARCHAR(255)');
-    await query('CREATE UNIQUE INDEX IF NOT EXISTS gallery_images_source_file_idx ON gallery_images (source, source_file_id) WHERE source_file_id IS NOT NULL');
+    await query(`
+      CREATE TABLE IF NOT EXISTS push_tokens (
+        token TEXT PRIMARY KEY,
+        username VARCHAR(100),
+        platform VARCHAR(50) DEFAULT 'android',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await query(`
+      CREATE TABLE IF NOT EXISTS sent_event_reminders (
+        reminder_key TEXT PRIMARY KEY,
+        sent_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
     await query('CREATE INDEX IF NOT EXISTS posts_author_username_idx ON posts (author_username)');
   } catch (err) {
     console.error('Error ensuring schema', err);
@@ -872,6 +942,95 @@ async function ensureRolesAndAdminUser() {
         console.log('Could not read server.address()', e && e.message);
       }
     });
+
+    // Background push scheduler for calendar events
+    // Checks every minute for upcoming events:
+    // 1) Previous day at 20:00 (within a 5-minute window)
+    // 2) 1 hour before event (within a 5-minute window)
+    function getHardcodedAndRecurringEvents() {
+      const items = [{
+        id: 'szureti-mulatsag-2026',
+        date: new Date(2026, 10, 14, 8, 30),
+        title: 'Cantusok Köre Szüreti Mulatság',
+        location: 'Liget Söröző'
+      }];
+      // Add recurring Monday Daltanítás
+      const now = new Date();
+      let d = new Date(now);
+      d.setHours(19, 0, 0, 0);
+      const daysUntilMonday = (8 - d.getDay()) % 7;
+      d.setDate(d.getDate() + daysUntilMonday);
+      if (d <= now) d.setDate(d.getDate() + 7);
+      for (let i = 0; i < 52; i++) {
+        items.push({
+          id: `daltanitas-${d.toISOString()}`,
+          date: new Date(d),
+          title: 'Daltanítás',
+          location: 'Liget Söröző'
+        });
+        d = new Date(d);
+        d.setDate(d.getDate() + 7);
+        if (d.getMonth() === 11 && d.getDate() === 25) d.setDate(d.getDate() + 7);
+      }
+      return items;
+    }
+
+    async function checkAndSendCalendarPushReminders() {
+      if (!firebaseInitialized) return;
+      try {
+        const events = getHardcodedAndRecurringEvents();
+        const now = Date.now();
+
+        for (const ev of events) {
+          const evTime = ev.date.getTime();
+          if (evTime < now) continue;
+
+          const timeFormatted = ev.date.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' });
+          const locationText = ev.location ? ` Helyszín: ${ev.location}` : '';
+
+          // 1. One hour before: trigger window between 55 and 65 mins before event
+          const oneHourBefore = evTime - 60 * 60 * 1000;
+          if (now >= oneHourBefore && now <= oneHourBefore + 5 * 60 * 1000) {
+            const key = `1h_${ev.id}_${evTime}`;
+            const [existing] = await query('SELECT 1 FROM sent_event_reminders WHERE reminder_key = ? LIMIT 1', [key]);
+            if (!existing || existing.length === 0) {
+              await query('INSERT INTO sent_event_reminders (reminder_key) VALUES (?) ON CONFLICT DO NOTHING', [key]);
+              console.log(`[EVENT PUSH] Sending 1-hour-before reminder for ${ev.title}`);
+              sendPushNotificationToAll({
+                title: `Hamarosan kezdődik: ${ev.title}`,
+                body: `1 óra múlva (${timeFormatted}) kezdődik!${locationText}`,
+                data: { type: 'event_reminder', eventId: ev.id }
+              }).catch(e => console.warn('1h event push error:', e));
+            }
+          }
+
+          // 2. Previous day at 20:00: trigger window between 20:00 and 20:05 on the previous day
+          const prevDay20 = new Date(evTime);
+          prevDay20.setDate(prevDay20.getDate() - 1);
+          prevDay20.setHours(20, 0, 0, 0);
+          const prevDayTime = prevDay20.getTime();
+          if (now >= prevDayTime && now <= prevDayTime + 5 * 60 * 1000) {
+            const key = `prev20_${ev.id}_${evTime}`;
+            const [existing] = await query('SELECT 1 FROM sent_event_reminders WHERE reminder_key = ? LIMIT 1', [key]);
+            if (!existing || existing.length === 0) {
+              await query('INSERT INTO sent_event_reminders (reminder_key) VALUES (?) ON CONFLICT DO NOTHING', [key]);
+              console.log(`[EVENT PUSH] Sending previous-day 20:00 reminder for ${ev.title}`);
+              sendPushNotificationToAll({
+                title: `Holnapi esemény: ${ev.title}`,
+                body: `Holnap ${timeFormatted}-kor kezdődik.${locationText}`,
+                data: { type: 'event_reminder', eventId: ev.id }
+              }).catch(e => console.warn('prev-day event push error:', e));
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error checking calendar push reminders:', err);
+      }
+    }
+
+    setInterval(checkAndSendCalendarPushReminders, 60 * 1000);
+    // Run an initial check after 5 seconds
+    setTimeout(checkAndSendCalendarPushReminders, 5000);
   } catch (err) {
     console.error('Failed to start server due to schema/role error', err);
     process.exit(1);

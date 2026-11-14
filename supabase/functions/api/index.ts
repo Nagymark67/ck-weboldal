@@ -234,6 +234,54 @@ async function checkAndSendCalendarReminders() {
       );
     }
   }
+
+  // Check custom database events
+  try {
+    const twoDaysAhead = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+    const { data: eventsList } = await db.from("calendar_events").select("*").gte("start_date", now.toISOString()).lte("start_date", twoDaysAhead);
+    if (Array.isArray(eventsList)) {
+      for (const ev of eventsList) {
+        const evStart = new Date(ev.start_date);
+        const diffMs = evStart.getTime() - now.getTime();
+        const diffMin = Math.round(diffMs / 60000);
+        const timeStr = evStart.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
+
+        if (diffMin >= 45 && diffMin <= 75) {
+          const reminderKey = `event_1h_${ev.id}_${evStart.getFullYear()}_${evStart.getMonth()}_${evStart.getDate()}`;
+          const { data: existing } = await db.from("sent_event_reminders").select("reminder_key").eq("reminder_key", reminderKey).maybeSingle();
+          if (!existing) {
+            await db.from("sent_event_reminders").insert({ reminder_key: reminderKey });
+            await sendFcmPushToAll(
+              `Hamarosan: ${ev.title}`,
+              `1 óra múlva (${timeStr}) kezdődik: ${ev.title} (${ev.location || "Liget Söröző"})`,
+              { type: "event_reminder", eventId: ev.id }
+            );
+          }
+        }
+
+        if (hours === 20) {
+          const tomorrow = new Date(budapestNow);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const evBudapestStr = evStart.toLocaleString("en-US", { timeZone: "Europe/Budapest" });
+          const evBudapest = new Date(evBudapestStr);
+          if (tomorrow.getFullYear() === evBudapest.getFullYear() && tomorrow.getMonth() === evBudapest.getMonth() && tomorrow.getDate() === evBudapest.getDate()) {
+            const reminderKey = `event_eve_${ev.id}_${evStart.getFullYear()}_${evStart.getMonth()}_${evStart.getDate()}`;
+            const { data: existing } = await db.from("sent_event_reminders").select("reminder_key").eq("reminder_key", reminderKey).maybeSingle();
+            if (!existing) {
+              await db.from("sent_event_reminders").insert({ reminder_key: reminderKey });
+              await sendFcmPushToAll(
+                `Holnap: ${ev.title}`,
+                `Holnap ${timeStr}-kor: ${ev.title} (${ev.location || "Liget Söröző"})`,
+                { type: "event_reminder", eventId: ev.id }
+              );
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Error checking calendar_events in cron:", err);
+  }
 }
 
 const encode = (value: string) => btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -747,6 +795,105 @@ app.get("/cron/check-event-reminders", async (_req, res) => {
   } catch (err) {
     console.error("Check reminders error", err);
     res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get("/events", async (_req, res) => {
+  try {
+    const { data, error } = await db.from("calendar_events").select("*").order("start_date", { ascending: true });
+    if (error) {
+      console.warn("Could not fetch calendar_events:", error.message);
+      return res.json({ events: [] });
+    }
+    const formatted = (data || []).map((ev) => ({
+      id: ev.id,
+      title: ev.title,
+      location: ev.location,
+      date: ev.start_date,
+      endDate: ev.end_date,
+      details: ev.description,
+      link: ev.link,
+      createdBy: ev.created_by
+    }));
+    res.json({ events: formatted });
+  } catch (err) {
+    console.error("Fetch events error", err);
+    res.status(500).json({ events: [] });
+  }
+});
+
+app.post("/events", async (req, res) => {
+  const username = await requireUser(req, res);
+  if (!username) return;
+  const canManage = (await hasRole(username, ["cantus_praeses", "jegyzo"])) || (await hasRole(username, ["all-time admin"]));
+  if (!canManage) return res.status(403).json({ message: "Nincs jogosultsága eseményt létrehozni" });
+
+  try {
+    const title = text(req.body?.title).trim();
+    const location = text(req.body?.location).trim();
+    const dateStr = text(req.body?.date || req.body?.startDate).trim();
+    const endDateStr = text(req.body?.endDate).trim();
+    const details = text(req.body?.details || req.body?.description).trim();
+    const link = text(req.body?.link).trim();
+
+    if (!title || !location || !dateStr) {
+      return res.status(400).json({ message: "A cím, helyszín és kezdési idő megadása kötelező." });
+    }
+
+    const start = new Date(dateStr);
+    const end = endDateStr ? new Date(endDateStr) : new Date(start.getTime() + 3 * 60 * 60 * 1000);
+    const eventId = text(req.body?.id).trim() || `event-${Date.now()}`;
+
+    const record = {
+      id: eventId,
+      title: title.slice(0, 255),
+      location: location.slice(0, 255),
+      start_date: start.toISOString(),
+      end_date: end.toISOString(),
+      description: details ? details.slice(0, 3000) : null,
+      link: link ? link.slice(0, 500) : null,
+      created_by: username
+    };
+
+    const { error } = await db.from("calendar_events").insert(record);
+    if (error) {
+      console.error("Insert calendar_events error:", error);
+      return res.status(500).json({ message: "Adatbázis hiba", error: error.message });
+    }
+
+    // Broadcast push notification to all devices!
+    try {
+      const timeStr = start.toLocaleString("hu-HU", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      sendFcmPushToAll(
+        `Új esemény: ${record.title}`,
+        `${timeStr} · ${record.location}`,
+        { type: "new_event", eventId: record.id }
+      ).catch((err) => console.warn("Background new_event FCM push failed:", err));
+    } catch (pushErr) {
+      console.warn("FCM push send error:", pushErr);
+    }
+
+    res.json({ success: true, event: record });
+  } catch (err) {
+    console.error("Create event error", err);
+    res.status(500).json({ message: "Hiba az esemény létrehozásakor" });
+  }
+});
+
+app.delete("/events/:id", async (req, res) => {
+  const username = await requireUser(req, res);
+  if (!username) return;
+  const canManage = (await hasRole(username, ["cantus_praeses", "jegyzo"])) || (await hasRole(username, ["all-time admin"]));
+  if (!canManage) return res.status(403).json({ message: "Nincs jogosultsága eseményt törölni" });
+
+  try {
+    const { id } = req.params;
+    const { error } = await db.from("calendar_events").delete().eq("id", id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete event error", err);
+    res.status(500).json({ message: "Hiba az esemény törlésekor" });
   }
 });
 
