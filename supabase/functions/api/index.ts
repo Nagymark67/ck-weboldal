@@ -319,6 +319,30 @@ async function galleryImageForClient(image: { image_url: string; [key: string]: 
   }
 }
 
+async function removeDriveGalleryImages() {
+  const { data: oldImages, error: selectError } = await db
+    .from("gallery_images")
+    .select("id,image_url")
+    .eq("source", "google_drive");
+  if (selectError) throw selectError;
+  const paths = (oldImages || []).map((image) => {
+    try {
+      return decodeURIComponent(new URL(image.image_url).pathname.split("/storage/v1/object/public/uploads/")[1] || "");
+    } catch {
+      return "";
+    }
+  }).filter(Boolean);
+  if (paths.length) {
+    const { error: storageError } = await db.storage.from("uploads").remove(paths);
+    if (storageError) throw storageError;
+  }
+  if (oldImages?.length) {
+    const { error: deleteError } = await db.from("gallery_images").delete().eq("source", "google_drive");
+    if (deleteError) throw deleteError;
+  }
+  return oldImages?.length || 0;
+}
+
 app.post("/posts", multipart.array("attachments", 5), async (req, res) => {
   const username = await requireUser(req, res);
   if (!username) return;
@@ -580,14 +604,18 @@ app.post("/admin/google-drive/import", async (req, res) => {
   const count = Number.isInteger(requestedCount) ? Math.min(Math.max(requestedCount, 1), 20) : 9;
   try {
     const files = await listDriveImages();
-    const { data: existing, error: existingError } = await db.from("gallery_images").select("source_file_id").eq("source", "google_drive").not("source_file_id", "is", null);
-    if (existingError) throw existingError;
-    const existingIds = new Set((existing || []).map((row) => row.source_file_id));
-    const candidates = files.filter((file) => file.id && !existingIds.has(file.id));
+    const candidates = files.filter((file) => file.id);
+    if (candidates.length < count) {
+      return res.status(400).json({
+        message: `A KépeCK mappában csak ${candidates.length} kép található, ezért nem lehet ${count} képet kiválasztani.`,
+        available: candidates.length
+      });
+    }
     for (let index = candidates.length - 1; index > 0; index -= 1) {
       const swapIndex = Math.floor(Math.random() * (index + 1));
       [candidates[index], candidates[swapIndex]] = [candidates[swapIndex], candidates[index]];
     }
+    const removed = await removeDriveGalleryImages();
     const imported = [];
     for (const file of candidates.slice(0, count)) {
       const fileResponse = await driveFetch(`files/${encodeURIComponent(file.id!)}?alt=media&supportsAllDrives=true`);
@@ -611,7 +639,7 @@ app.post("/admin/google-drive/import", async (req, res) => {
       if (insertError) throw insertError;
       imported.push(image);
     }
-    res.json({ success: true, imported, available: files.length, newCandidates: candidates.length, skipped: files.length - imported.length });
+    res.json({ success: true, imported, removed, available: files.length, newCandidates: candidates.length, skipped: files.length - imported.length });
   } catch (error) {
     console.error("Google Drive import error", error);
     res.status(500).json({ message: error instanceof Error ? error.message : "A Google Drive importálása nem sikerült." });
