@@ -450,7 +450,11 @@ app.get("/posts", async (req, res) => {
     const visibility = session?.username ? ["mindenki", "tagok_es_tanitvanyok", "csak_tagok"] : ["mindenki"];
     const { data, error } = await db.from("posts").select("id,author_username,content,visibility,attachments,poll,created_at").in("visibility", visibility).order("created_at", { ascending: false }).limit(50);
     if (error) throw error;
-    res.json({ posts: data || [], currentUser: session?.username || null });
+    const posts = await Promise.all((data || []).map(async (post) => ({
+      ...post,
+      attachments: await Promise.all((Array.isArray(post.attachments) ? post.attachments : []).map(postAttachmentForClient))
+    })));
+    res.json({ posts, currentUser: session?.username || null });
   } catch (error) {
     console.error("Posts error", error);
     res.status(500).json({ posts: [] });
@@ -476,6 +480,28 @@ function storagePathFromUrl(value: unknown) {
   } catch {
     return "";
   }
+}
+
+async function postAttachmentForClient(attachment: unknown) {
+  const source = typeof attachment === "string"
+    ? attachment
+    : attachment && typeof attachment === "object"
+      ? (attachment as Record<string, unknown>).url || (attachment as Record<string, unknown>).image_url || (attachment as Record<string, unknown>).path
+      : "";
+  const storagePath = storagePathFromUrl(source);
+  if (!storagePath) return attachment;
+  const { data, error } = await db.storage.from("uploads").createSignedUrl(storagePath, 60 * 60);
+  if (error || !data?.signedUrl) {
+    if (error) console.warn("Post attachment signing failed", error);
+    return attachment;
+  }
+  if (typeof attachment === "string") return data.signedUrl;
+  const key = attachment && typeof attachment === "object" && "url" in attachment
+    ? "url"
+    : attachment && typeof attachment === "object" && "image_url" in attachment
+      ? "image_url"
+      : "path";
+  return { ...(attachment as Record<string, unknown>), [key]: data.signedUrl };
 }
 
 async function getGoogleDriveAccessToken() {
