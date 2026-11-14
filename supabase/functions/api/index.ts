@@ -61,6 +61,181 @@ const parseId = (value: string) => {
   return Number.isInteger(id) && id > 0 ? id : null;
 };
 
+// --- Firebase Cloud Messaging (FCM HTTP v1) Service ---
+let cachedFcmToken: { token: string; exp: number } | null = null;
+const fcmProjectId = "ck-app-2665c";
+const defaultFcmClientEmail = "firebase-adminsdk-fbsvc@ck-app-2665c.iam.gserviceaccount.com";
+const defaultFcmPrivateKeyPkcs8 = `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDAytrUM/oR77Gt
+ikxsetKArfEGXE7zDkYqRhuoWLRu1D3iKuQHY0tdNy6Voa9FC20WZ/4K85I88M5g
+/jgawAg5LT1QgzJPevyd6tco8BJGQgA0k7Cc/NTcS+zn/St4+eW1OcbyXXQUm0ia
+gggEY8YmeaWiA0DOCf6H2SxwCTNzfwyyMHvghpl/pD9CqiHiLXumyOaF19TtVKOq
+RNK5lJ3dbdfGLkmbToRg17/o2JfHYgJEfFJkUs+eYGgfEGibeGbXuj85EIoTp0Zy
+qEpYKbSGE0cyU+LJCVb4gXjt5vqo7gDVdrYpR5UXEcsxM19fon8YUJVynurUeaUP
+dU9WPCsLAgMBAAECggEAF7tg1epSss6HV/jEO5OgQfLSI+73pk0a2gKoo5UicNoe
+MVmyRC6MN7yejBDLxdCy7E/UzShP12yVGwoa10Ai7aw3S1KQaN7s0HZOEgirVzay
+ARwvthjGuG99iXkirCZRiSNu7VAPr/xazZo1aRpBvrlkEt4aUMKY2xl4B4/lDicI
+XsuMY8m3RY0GzD5P6CgKmCLuDH+HB4gz32aG9iEecrlMtRrs60uzVMRCIYw7nPc9
+Tve+/feTVNow1Wje0f7YwV87YwyVEiD1zQRZcrEk7+E2fEfi9bykDu8qELsYIPdH
+q/zQa5MYZeoxP3GpZ1w1lCtL4t7jjJ7KvxLV6yk4YQKBgQD+RDWYUuECDEJfvy7s
++OSM3FVbiu05gXlesZmx39yI8jJOkQJV4z2focRCz+bU++2jJv8WpHwTBryH/UmD
+b/uPc6FatR3qsZlB2dag3tLdMTnOj0BjbJawTYdxYhgAF73Dps73hlF/jgaeR6fR
+YR7WyTJyLFAQ+MgD9SS+VAwxaQKBgQDCG1mgfbFBwLdvZIRctevpDVaYumKX+1BM
+Uyh2O8Vu+1xjErNCqdnkHjl0fk8VEmdJ9A4K48jm+VRHNo+RHRdrmRIJEBTOQv9x
+t3Jy0Wk3N4twYaGO4UCP1WrstBKQUsyT0LBynQLHNSTtRIFPTMI/TawsLPtREAVs
+nu3jTXw2UwKBgA6vT80ZVEdy/85Z01L6WPDNtNxRnLvKf4D5jt/YBvudyUwCUfk1
+45Q5moUlTraUSjg3A1qCa2wJ4o+UEE/YAtZZHkOH3E92rFxCQYQO+myt8CG+4kAb
+wGQ0RhNFUA+JT3tiQefHySMtx7ISf123Vzmeaxxu9LzWMW8RFGstnXqpAoGAKC6/
+RCEhE8qQbsfxOrwSZUF0ntNe27WT7uj8JFXFTm9MtdnGMFO3Hqk/HaWUO3l+1mlm
+isyS53XQA5oA6HqMQaMDf8rLc9Ocy+69C5XcYSjnfdFIP6rT0bLNmsjAWw44+ZSn
+ImLsk06mIVQgLMloIPC0ZsS9Fg/p/417E6YTw68CgYEA2EJU0d9xNYmMKl+G0rti
+er829HRqK+cezEpj51qTWdoCqiPH4/YrvmtXe6rpCG71s11k2Ktwio7PelWhug3b
+9mKFPPMzt17w7rwn4w9iPEsOjUxOIgUyOHWjn+l89IKPpnw1b7b47gvq9OOGVF5H
+tcvA+O6ZDDWYggJ9sWKc/P4=
+-----END PRIVATE KEY-----`;
+
+async function getFcmAccessToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedFcmToken && cachedFcmToken.exp > now + 60000) {
+    return cachedFcmToken.token;
+  }
+  let email = defaultFcmClientEmail;
+  let pkcs8 = defaultFcmPrivateKeyPkcs8;
+  const envKey = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
+  if (envKey) {
+    try {
+      const parsed = JSON.parse(envKey);
+      if (parsed.client_email && parsed.private_key) {
+        email = parsed.client_email;
+        pkcs8 = parsed.private_key;
+      }
+    } catch (_) {}
+  }
+
+  const privateKey = await importPKCS8(pkcs8, "RS256");
+  const jwt = await new SignJWT({
+    scope: "https://www.googleapis.com/auth/firebase.messaging"
+  })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setIssuer(email)
+    .setSubject(email)
+    .setAudience("https://oauth2.googleapis.com/token")
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(privateKey);
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt
+    })
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to obtain Google access token: ${errorText}`);
+  }
+  const data = await res.json();
+  cachedFcmToken = { token: data.access_token, exp: now + 3500000 };
+  return data.access_token;
+}
+
+async function sendFcmPushToAll(title: string, body: string, extraData: Record<string, string> = {}) {
+  try {
+    const { data: rows, error } = await db.from("push_tokens").select("token");
+    if (error) {
+      console.error("Error querying push_tokens", error);
+      return;
+    }
+    if (!rows || rows.length === 0) {
+      console.log("[FCM PUSH] No registered tokens found");
+      return;
+    }
+    const tokens = rows.map((r: { token: string }) => r.token).filter(Boolean);
+    const accessToken = await getFcmAccessToken();
+    const endpoint = `https://fcm.googleapis.com/v1/projects/${fcmProjectId}/messages:send`;
+
+    const deadTokens: string[] = [];
+    await Promise.allSettled(
+      tokens.map(async (deviceToken: string) => {
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              message: {
+                token: deviceToken,
+                notification: { title, body },
+                data: extraData,
+                android: {
+                  priority: "high",
+                  notification: {
+                    sound: "default",
+                    channel_id: "cantusok_push_channel"
+                  }
+                }
+              }
+            })
+          });
+          if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            const code = errJson?.error?.details?.[0]?.errorCode || errJson?.error?.status;
+            if (code === "UNREGISTERED" || code === "INVALID_ARGUMENT") {
+              deadTokens.push(deviceToken);
+            }
+          }
+        } catch (singleErr) {
+          console.warn("Single FCM send failed:", singleErr);
+        }
+      })
+    );
+
+    if (deadTokens.length > 0) {
+      await db.from("push_tokens").delete().in("token", deadTokens);
+    }
+  } catch (err) {
+    console.error("sendFcmPushToAll error:", err);
+  }
+}
+
+async function checkAndSendCalendarReminders() {
+  const now = new Date();
+  const budapestDateStr = now.toLocaleString("en-US", { timeZone: "Europe/Budapest" });
+  const budapestNow = new Date(budapestDateStr);
+  const dayOfWeek = budapestNow.getDay();
+  const hours = budapestNow.getHours();
+
+  if (dayOfWeek === 0 && hours === 20) {
+    const reminderKey = `daltanitas_eve_${budapestNow.getFullYear()}_${budapestNow.getMonth()}_${budapestNow.getDate()}`;
+    const { data: existing } = await db.from("sent_event_reminders").select("reminder_key").eq("reminder_key", reminderKey).maybeSingle();
+    if (!existing) {
+      await db.from("sent_event_reminders").insert({ reminder_key: reminderKey });
+      await sendFcmPushToAll(
+        "Holnap Daltanítás!",
+        "Emlékeztető: Holnap 19:00-kor Daltanítás a Liget Sörözőben!",
+        { type: "event_reminder" }
+      );
+    }
+  }
+
+  if (dayOfWeek === 1 && hours === 18) {
+    const reminderKey = `daltanitas_1h_${budapestNow.getFullYear()}_${budapestNow.getMonth()}_${budapestNow.getDate()}`;
+    const { data: existing } = await db.from("sent_event_reminders").select("reminder_key").eq("reminder_key", reminderKey).maybeSingle();
+    if (!existing) {
+      await db.from("sent_event_reminders").insert({ reminder_key: reminderKey });
+      await sendFcmPushToAll(
+        "Hamarosan Daltanítás!",
+        "1 óra múlva (19:00) kezdődik a Daltanítás a Liget Sörözőben!",
+        { type: "event_reminder" }
+      );
+    }
+  }
+}
+
 const encode = (value: string) => btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const decode = (value: string) => atob(value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4));
 const key = async () => crypto.subtle.importKey("raw", new TextEncoder().encode(sessionSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
@@ -137,7 +312,10 @@ function sanitizeContent(input: string) {
     .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, "");
 }
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", async (_req, res) => {
+  checkAndSendCalendarReminders().catch(() => {});
+  res.json({ ok: true });
+});
 
 app.post("/register", async (req, res) => {
   const username = text(req.body?.username).trim();
@@ -238,6 +416,18 @@ async function uploadFile(file: { originalname: string; mimetype: string; buffer
   const { error } = await db.storage.from("uploads").upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
   if (error) throw error;
   return `${supabaseUrl}/storage/v1/object/public/uploads/${path}`;
+}
+
+function storagePathFromUrl(value: unknown) {
+  if (typeof value !== "string") return "";
+  try {
+    const url = new URL(value);
+    const marker = "/storage/v1/object/public/uploads/";
+    const index = url.pathname.indexOf(marker);
+    return index === -1 ? "" : decodeURIComponent(url.pathname.slice(index + marker.length));
+  } catch {
+    return "";
+  }
 }
 
 async function getGoogleDriveAccessToken() {
@@ -349,6 +539,19 @@ app.post("/posts", multipart.array("attachments", 5), async (req, res) => {
     const attachments = await Promise.all(files.map((file) => uploadFile(file, username)));
     const { error } = await db.from("posts").insert({ author_username: username, content, visibility, attachments, poll });
     if (error) throw error;
+
+    // Send push notification to all registered phones
+    try {
+      const cleanSnippet = content.replace(/<[^>]+>/g, "").trim().slice(0, 100);
+      sendFcmPushToAll(
+        `Új bejegyzés: ${username}`,
+        cleanSnippet || "Új bejegyzés jelent meg a Cantusok Köre oldalán.",
+        { type: "new_post" }
+      ).catch((err) => console.warn("Background FCM send failed:", err));
+    } catch (pushErr) {
+      console.warn("FCM push send error:", pushErr);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error("Create post error", error);
@@ -382,6 +585,37 @@ app.delete("/posts/:id", async (req, res) => {
   const result = await db.from("posts").delete().eq("id", id);
   if (result.error) return res.status(500).json({ message: "Hiba a poszt törlésekor" });
   res.json({ success: true });
+});
+
+app.delete("/posts/:id/attachments/:attachmentIndex", async (req, res) => {
+  const username = await requireUser(req, res);
+  if (!username) return;
+  const id = parseId(req.params.id);
+  const attachmentIndex = Number.parseInt(req.params.attachmentIndex, 10);
+  if (!id || !Number.isInteger(attachmentIndex) || attachmentIndex < 0) {
+    return res.status(400).json({ message: "Érvénytelen képazonosító" });
+  }
+  const { data: post, error } = await db.from("posts").select("author_username,attachments").eq("id", id).maybeSingle();
+  if (error || !post) return res.status(404).json({ message: "A poszt nem található" });
+  if (post.author_username !== username && !await hasRole(username, ["cantus_praeses", "jegyzo"])) {
+    return res.status(403).json({ message: "Nincs jogosultsága a kép törléséhez" });
+  }
+  const attachments = Array.isArray(post.attachments) ? post.attachments : [];
+  if (attachmentIndex >= attachments.length) return res.status(404).json({ message: "A kép nem található" });
+  const [removed] = attachments.splice(attachmentIndex, 1);
+  const result = await db.from("posts").update({ attachments }).eq("id", id);
+  if (result.error) return res.status(500).json({ message: "A kép törlése nem sikerült" });
+  const removedUrl = typeof removed === "string"
+    ? removed
+    : removed && typeof removed === "object"
+      ? (removed.url || removed.image_url || removed.path || "")
+      : "";
+  const storagePath = storagePathFromUrl(removedUrl);
+  if (storagePath) {
+    const { error: storageError } = await db.storage.from("uploads").remove([storagePath]);
+    if (storageError) console.error("Post attachment storage cleanup failed", storageError);
+  }
+  res.json({ success: true, attachments });
 });
 
 app.get("/gallery", async (req, res) => {
@@ -474,6 +708,46 @@ app.post("/online-leave", async (req, res) => {
     return res.status(500).json({ message: "Az online állapot törlése nem sikerült" });
   }
   res.json({ success: true });
+});
+
+app.post("/push/register-token", async (req, res) => {
+  const token = text(req.body?.token).trim();
+  const platform = text(req.body?.platform) || "android";
+  if (!token) return res.status(400).json({ message: "Missing token" });
+  const user = await currentUser(req);
+  const username = user?.username ? String(user.username) : null;
+  const { error } = await db.from("push_tokens").upsert({
+    token,
+    username,
+    platform,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "token" });
+  if (error) {
+    console.error("Error storing push token", error);
+    return res.status(500).json({ message: "DB error" });
+  }
+  res.json({ success: true });
+});
+
+app.post("/push/unregister-token", async (req, res) => {
+  const token = text(req.body?.token).trim();
+  if (!token) return res.status(400).json({ message: "Missing token" });
+  const { error } = await db.from("push_tokens").delete().eq("token", token);
+  if (error) {
+    console.error("Error deleting push token", error);
+    return res.status(500).json({ message: "DB error" });
+  }
+  res.json({ success: true });
+});
+
+app.get("/cron/check-event-reminders", async (_req, res) => {
+  try {
+    await checkAndSendCalendarReminders();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Check reminders error", err);
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 async function requireAdmin(req: express.Request, res: express.Response) {
