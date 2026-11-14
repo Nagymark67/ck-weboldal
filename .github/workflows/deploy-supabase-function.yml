@@ -28,4 +28,4 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN"
           test -n "$SUPABASE_PROJECT_REF"
       - name: Deploy API function
-        run: supabase functions deploy api --remote "$SUPABASE_PROJECT_REF" --yes
+        run: supabase functions deploy api --remote="$SUPABASE_PROJECT_REF" --yes
