@@ -507,7 +507,7 @@ app.post("/admin/users/:id/reset-password", async (req, res) => {
 
 app.get("/admin/gallery/pending", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
-  const { data, error } = await db.from("gallery_images").select("id,image_url,alt_text,uploaded_by,created_at").eq("approved", false).order("created_at", { ascending: true });
+  const { data, error } = await db.from("gallery_images").select("id,image_url,alt_text,uploaded_by,created_at,source").eq("approved", false).order("created_at", { ascending: true });
   if (error) return res.status(500).json({ message: "A függő képek lekérése nem sikerült." });
   res.json({ images: data || [] });
 });

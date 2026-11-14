@@ -75,7 +75,10 @@
         </table>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:24px;">
-        <h2 style="margin:0;">Függőben lévő galériaképek</h2>
+        <div>
+          <h2 style="margin:0;">Függőben lévő galériaképek</h2>
+          <p class="small" style="margin:6px 0 0;">A Google Drive-ból importált képek itt jelennek meg. Jóváhagyás után kerülnek az élő galériába.</p>
+        </div>
         <a class="button button-outline" href="photos.html" style="font-size:0.9rem;">Élő galéria megtekintése &rarr;</a>
       </div>
       <div id="pendingGallery" style="margin-top:16px;"><p>Betöltés...</p></div>
@@ -191,12 +194,15 @@
     userSearch.addEventListener('input', filterUsers);
     const pendingGallery = document.getElementById('pendingGallery');
     const pendingResponse = await window.ckApiFetch('/admin/gallery/pending');
-    const pendingData = pendingResponse.ok ? await pendingResponse.json() : { images: [] };
-    pendingGallery.replaceChildren();
-    if (!pendingData.images.length) {
-      pendingGallery.textContent = 'Nincs jóváhagyásra váró kép.';
+    if (!pendingResponse.ok) {
+      const errorData = await pendingResponse.json().catch(() => ({}));
+      pendingGallery.textContent = errorData.message || 'A függőben lévő képek nem tölthetők be.';
     } else {
-      pendingData.images.forEach((image) => {
+      const pendingData = await pendingResponse.json();
+      pendingGallery.replaceChildren();
+      if (!pendingData.images.length) {
+        pendingGallery.textContent = 'Nincs jóváhagyásra váró kép. Importálj képeket a Google Drive-ból, és itt jelennek meg a Jóváhagyás és Elutasítás gombok.';
+      } else pendingData.images.forEach((image) => {
         const card = document.createElement('figure');
         const preview = document.createElement('img');
         preview.src = image.image_url;
@@ -204,7 +210,8 @@
         preview.style.maxWidth = '220px';
         preview.style.display = 'block';
         const caption = document.createElement('figcaption');
-        caption.textContent = `Feltöltő: ${image.uploaded_by}`;
+        const source = image.source === 'google_drive' ? 'Google Drive – KépeCK' : 'Tagi feltöltés';
+        caption.textContent = `${source} · Feltöltő: ${image.uploaded_by}`;
         const approve = document.createElement('button');
         approve.textContent = 'Jóváhagyás';
         approve.addEventListener('click', async () => {
