@@ -816,9 +816,6 @@
         }
       });
 
-      // Manage online status and 5-minute background auto-logout
-      let backgroundLogoutTimer = null;
-
       App.addListener('appStateChange', async ({ isActive }) => {
         const user = await checkUser();
         if (user) {
@@ -829,24 +826,7 @@
               console.warn('Could not update online status on app close', error);
             }
 
-            // Start a 5-minute background timer before logging out
-            if (!backgroundLogoutTimer) {
-              backgroundLogoutTimer = setTimeout(async () => {
-                try {
-                  await window.ckApiFetch('/logout', { method: 'POST' });
-                  window.location.reload();
-                } catch (e) {
-                  console.warn('Background logout failed', e);
-                }
-              }, 5 * 60 * 1000);
-            }
           } else {
-            // App resumed before 5 minutes: cancel background logout
-            if (backgroundLogoutTimer) {
-              clearTimeout(backgroundLogoutTimer);
-              backgroundLogoutTimer = null;
-            }
-
             try {
               await window.ckApiFetch('/online-ping', { method: 'POST' });
             } catch (error) {

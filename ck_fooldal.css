@@ -186,6 +186,7 @@ button, .button { cursor: pointer; }
 [data-theme="dark"] .button-outline { background: transparent; color: #ffd1d1; border-color: #ffd1d1; }
 
 .page-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 70px; }
+.admin-page .page-shell { width: min(1500px, calc(100% - 32px)); }
 .hero {
   min-height: min(560px, 70vh);
   display: grid;
@@ -401,6 +402,7 @@ footer { padding: 28px 16px; color: var(--muted); text-align: center; }
   .hero-content { width: min(100% - 32px, 740px); }
   .hero h1 { font-size: clamp(2rem, 11vw, 3.2rem); }
   .page-shell { width: calc(100% - 20px); padding: 24px 0 86px; }
+  .admin-page .page-shell { width: calc(100% - 20px); }
   .content-card { padding: 20px 16px; border-radius: 18px; }
   .page-heading { margin: 8px auto 20px; }
   .section-heading h2, .page-heading h1 { font-size: clamp(1.8rem, 9vw, 2.5rem); }
@@ -440,4 +442,3 @@ footer {
     bottom: calc(12px + env(safe-area-inset-bottom, 0));
   }
 }
-
