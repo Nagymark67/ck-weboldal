@@ -868,6 +868,9 @@ app.post("/events", async (req, res) => {
 
     const start = new Date(dateStr);
     const end = endDateStr ? new Date(endDateStr) : new Date(start.getTime() + 3 * 60 * 60 * 1000);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return res.status(400).json({ message: "Érvénytelen esemény-időpont." });
+    }
     const eventId = text(req.body?.id).trim() || `event-${Date.now()}`;
 
     const record = {
@@ -899,7 +902,19 @@ app.post("/events", async (req, res) => {
       console.warn("FCM push send error:", pushErr);
     }
 
-    res.json({ success: true, event: record });
+    res.json({
+      success: true,
+      event: {
+        id: record.id,
+        title: record.title,
+        location: record.location,
+        date: record.start_date,
+        endDate: record.end_date,
+        details: record.description,
+        link: record.link,
+        createdBy: record.created_by
+      }
+    });
   } catch (err) {
     console.error("Create event error", err);
     res.status(500).json({ message: "Hiba az esemény létrehozásakor" });

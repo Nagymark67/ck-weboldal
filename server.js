@@ -551,6 +551,9 @@ app.post('/events', async (req, res) => {
 
   const start = new Date(dateStr);
   const end = endDate ? new Date(endDate) : new Date(start.getTime() + 3 * 60 * 60 * 1000);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    return res.status(400).json({ message: 'Érvénytelen esemény-időpont.' });
+  }
   const eventId = id || `event-${Date.now()}`;
   const record = {
     id: eventId,

@@ -103,17 +103,13 @@
       if (!Array.isArray(deletedEventIds)) deletedEventIds = [];
       const remoteEvents = JSON.parse(localStorage.getItem('cantusok-remote-events') || '[]');
       if (Array.isArray(remoteEvents)) remoteEvents.forEach((ev) => {
-        const id = ev.id || `${ev.date}|${ev.title}`;
-        if (!items.some((item) => item.id === id)) {
-          items.push({ ...ev, id, date: new Date(ev.date), endDate: ev.endDate ? new Date(ev.endDate) : new Date(new Date(ev.date).getTime() + 3 * 60 * 60 * 1000) });
-        }
+        const normalized = normalizeCalendarEvent(ev);
+        if (normalized && !items.some((item) => item.id === normalized.id)) items.push(normalized);
       });
       const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
       if (Array.isArray(savedEvents)) savedEvents.forEach((ev) => {
-        const id = ev.id || `${ev.date}|${ev.title}`;
-        if (!items.some((item) => item.id === id)) {
-          items.push({ ...ev, id, date: new Date(ev.date), endDate: ev.endDate ? new Date(ev.endDate) : new Date(new Date(ev.date).getTime() + 3 * 60 * 60 * 1000) });
-        }
+        const normalized = normalizeCalendarEvent(ev);
+        if (normalized && !items.some((item) => item.id === normalized.id)) items.push(normalized);
       });
     } catch (err) {
       console.warn('Could not load saved events', err);
@@ -128,6 +124,21 @@
     return items.filter((ev) => !deletedEventIds.includes(ev.id));
   }
 
+  function normalizeCalendarEvent(event) {
+    if (!event || typeof event !== 'object') return null;
+    const dateValue = event.date || event.start_date;
+    const date = new Date(dateValue);
+    if (!dateValue || Number.isNaN(date.getTime())) return null;
+    const endDate = new Date(event.endDate || event.end_date || date.getTime() + 3 * 60 * 60 * 1000);
+    return {
+      ...event,
+      id: event.id || `${date.toISOString()}|${event.title || ''}`,
+      date,
+      endDate: Number.isNaN(endDate.getTime()) ? new Date(date.getTime() + 3 * 60 * 60 * 1000) : endDate,
+      details: event.details ?? event.description
+    };
+  }
+
   async function fetchRemoteEvents() {
     try {
       if (!window.ckApiFetch) return;
@@ -135,7 +146,7 @@
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data?.events)) {
-          localStorage.setItem('cantusok-remote-events', JSON.stringify(data.events));
+          localStorage.setItem('cantusok-remote-events', JSON.stringify(data.events.map(normalizeCalendarEvent).filter(Boolean)));
           if (typeof rerenderEvents === 'function') {
             rerenderEvents();
           }
@@ -508,10 +519,6 @@
         }
         return;
       }
-      const savedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]');
-      savedEvents.push(created);
-      localStorage.setItem('cantusok-events', JSON.stringify(savedEvents));
-
       try {
         if (window.ckApiFetch) {
           const res = await window.ckApiFetch('/events', {
@@ -519,13 +526,22 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(created)
           });
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.event?.id) created.id = data.event.id;
-          }
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.message || 'Az esemény mentése nem sikerült.');
+          const remoteEvent = normalizeCalendarEvent(data.event);
+          if (!remoteEvent) throw new Error('A szerver érvénytelen eseményt küldött vissza.');
+          created.id = remoteEvent.id;
+          const updatedEvents = JSON.parse(localStorage.getItem('cantusok-events') || '[]')
+            .filter((item) => item.id !== created.id);
+          updatedEvents.push(remoteEvent);
+          localStorage.setItem('cantusok-events', JSON.stringify(updatedEvents));
+        } else {
+          throw new Error('Az esemény API nem érhető el.');
         }
       } catch (err) {
-        console.warn('Failed to post event to server:', err);
+        console.error('Failed to post event to server:', err);
+        alert(err.message || 'Az esemény mentése nem sikerült.');
+        return;
       }
 
       eventForm.reset();
