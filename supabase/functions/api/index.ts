@@ -45,7 +45,6 @@ function isAllowedOrigin(origin: string | undefined): boolean {
     const parsed = new URL(origin);
     const host = parsed.hostname.toLowerCase();
     if (host === "cantusokkore.hu" || host.endsWith(".cantusokkore.hu")) return true;
-    if (host === "nagymark67.github.io") return true;
     if (host === "localhost" || host === "127.0.0.1") return true;
   } catch {
     // ignore invalid URLs
