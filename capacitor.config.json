@@ -3,7 +3,7 @@
   "appName": "Cantusok Köre",
   "webDir": "www",
   "server": {
-    "hostname": "nagymark67.github.io",
+    "hostname": "cantusokkore.hu",
     "androidScheme": "https"
   },
   "plugins": {
@@ -17,6 +17,14 @@
     "StatusBar": {
       "style": "DARK",
       "backgroundColor": "#4b0000"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_launcher",
+      "iconColor": "#4b0000",
+      "sound": "default"
     }
   }
 }

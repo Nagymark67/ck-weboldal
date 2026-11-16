@@ -36,11 +36,26 @@ const smtpTransport = smtpHost && smtpUser && smtpPass
   })
   : null;
 const cookieName = "ck_session";
-const allowedOrigins = (Deno.env.get("CORS_ORIGINS") || "*").split(",").map((origin) => origin.trim()).filter(Boolean);
+const configuredOrigins = (Deno.env.get("CORS_ORIGINS") || "*").split(",").map((origin) => origin.trim()).filter(Boolean);
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  if (configuredOrigins.includes("*") || configuredOrigins.includes(origin)) return true;
+  try {
+    const parsed = new URL(origin);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "cantusokkore.hu" || host.endsWith(".cantusokkore.hu")) return true;
+    if (host === "nagymark67.github.io") return true;
+    if (host === "localhost" || host === "127.0.0.1") return true;
+  } catch {
+    // ignore invalid URLs
+  }
+  return false;
+}
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && (allowedOrigins.includes("*") || allowedOrigins.includes(origin))) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -450,11 +465,7 @@ app.get("/posts", async (req, res) => {
     const visibility = session?.username ? ["mindenki", "tagok_es_tanitvanyok", "csak_tagok"] : ["mindenki"];
     const { data, error } = await db.from("posts").select("id,author_username,content,visibility,attachments,poll,created_at").in("visibility", visibility).order("created_at", { ascending: false }).limit(50);
     if (error) throw error;
-    const posts = await Promise.all((data || []).map(async (post) => ({
-      ...post,
-      attachments: await Promise.all((Array.isArray(post.attachments) ? post.attachments : []).map(postAttachmentForClient))
-    })));
-    res.json({ posts, currentUser: session?.username || null });
+    res.json({ posts: data || [], currentUser: session?.username || null });
   } catch (error) {
     console.error("Posts error", error);
     res.status(500).json({ posts: [] });
@@ -480,28 +491,6 @@ function storagePathFromUrl(value: unknown) {
   } catch {
     return "";
   }
-}
-
-async function postAttachmentForClient(attachment: unknown) {
-  const source = typeof attachment === "string"
-    ? attachment
-    : attachment && typeof attachment === "object"
-      ? (attachment as Record<string, unknown>).url || (attachment as Record<string, unknown>).image_url || (attachment as Record<string, unknown>).path
-      : "";
-  const storagePath = storagePathFromUrl(source);
-  if (!storagePath) return attachment;
-  const { data, error } = await db.storage.from("uploads").createSignedUrl(storagePath, 60 * 60);
-  if (error || !data?.signedUrl) {
-    if (error) console.warn("Post attachment signing failed", error);
-    return attachment;
-  }
-  if (typeof attachment === "string") return data.signedUrl;
-  const key = attachment && typeof attachment === "object" && "url" in attachment
-    ? "url"
-    : attachment && typeof attachment === "object" && "image_url" in attachment
-      ? "image_url"
-      : "path";
-  return { ...(attachment as Record<string, unknown>), [key]: data.signedUrl };
 }
 
 async function getGoogleDriveAccessToken() {
@@ -868,9 +857,6 @@ app.post("/events", async (req, res) => {
 
     const start = new Date(dateStr);
     const end = endDateStr ? new Date(endDateStr) : new Date(start.getTime() + 3 * 60 * 60 * 1000);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-      return res.status(400).json({ message: "Érvénytelen esemény-időpont." });
-    }
     const eventId = text(req.body?.id).trim() || `event-${Date.now()}`;
 
     const record = {
@@ -902,19 +888,7 @@ app.post("/events", async (req, res) => {
       console.warn("FCM push send error:", pushErr);
     }
 
-    res.json({
-      success: true,
-      event: {
-        id: record.id,
-        title: record.title,
-        location: record.location,
-        date: record.start_date,
-        endDate: record.end_date,
-        details: record.description,
-        link: record.link,
-        createdBy: record.created_by
-      }
-    });
+    res.json({ success: true, event: record });
   } catch (err) {
     console.error("Create event error", err);
     res.status(500).json({ message: "Hiba az esemény létrehozásakor" });

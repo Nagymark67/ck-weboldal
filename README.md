@@ -231,7 +231,7 @@ To deploy it:
    supabase secrets set PROJECT_URL=https://<project-ref>.supabase.co
    supabase secrets set SECRET_KEY=<supabase-secret-key>
    supabase secrets set SESSION_SECRET=<long-random-value>
-   supabase secrets set CORS_ORIGINS=https://<account>.github.io
+   supabase secrets set CORS_ORIGINS=https://cantusokkore.hu,https://www.cantusokkore.hu
    ```
 
    For admin password reset e-mails, also configure the SMTP provider:

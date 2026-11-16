@@ -176,7 +176,15 @@ const allowedFounders = [
 ];
 
 
-const defaultOrigins = ['http://localhost', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5500'];
+const defaultOrigins = [
+  'http://localhost',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5500',
+  'https://cantusokkore.hu',
+  'https://www.cantusokkore.hu',
+  'https://nagymark67.github.io'
+];
 const normalizeOrigin = (origin) => origin.trim().replace(/\/+$/, '');
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(normalizeOrigin).filter(Boolean)
@@ -551,9 +559,6 @@ app.post('/events', async (req, res) => {
 
   const start = new Date(dateStr);
   const end = endDate ? new Date(endDate) : new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-    return res.status(400).json({ message: 'Érvénytelen esemény-időpont.' });
-  }
   const eventId = id || `event-${Date.now()}`;
   const record = {
     id: eventId,

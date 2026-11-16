@@ -27,7 +27,8 @@ const filesToCopy = [
   'daloskonyv.pdf',
   'daloskonyv-data.js',
   'pdf.min.js',
-  'pdf.worker.min.js'
+  'pdf.worker.min.js',
+  'CNAME'
 ];
 
 const dirsToCopy = [
